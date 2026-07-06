@@ -996,6 +996,9 @@ tireMarkFolder
   .add(tm, 'backSpacing', -1, 1, 0.01)
   .name('Back spacing')
 tireMarkFolder
+  .add(tm, 'backForwardOffset', -1, 1, 0.01)
+  .name('Back forward offset')
+tireMarkFolder
   .add(tm, 'opacity', 0, 1, 0.01)
   .name('Opacity')
   .onChange(() => vehicle.applyTireMarkParams())

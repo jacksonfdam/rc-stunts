@@ -118,6 +118,7 @@ export const DEFAULT_TIRE_MARK_PARAMS = {
   frontWidth: 0.5,
   backWidth: 0.65,
   backSpacing: 0.22,
+  backForwardOffset: 0.28,
   opacity: 0.40,
   capOpacity: 0,
   fadeLength: 1.1,
@@ -1092,6 +1093,11 @@ export class Vehicle {
         this.chassisBody.quaternion.vmult(new CANNON.Vec3(1, 0, 0), this._tmpRight)
         this._tmpMarkPosition.x += this._tmpRight.x * side * p.backSpacing
         this._tmpMarkPosition.z += this._tmpRight.z * side * p.backSpacing
+      }
+      if (i >= 2 && p.backForwardOffset !== 0) {
+        this.chassisBody.quaternion.vmult(new CANNON.Vec3(0, 0, 1), this._tmpForward)
+        this._tmpMarkPosition.x += this._tmpForward.x * p.backForwardOffset
+        this._tmpMarkPosition.z += this._tmpForward.z * p.backForwardOffset
       }
 
       const lastPosition = this._lastTireMarkPositions[i]

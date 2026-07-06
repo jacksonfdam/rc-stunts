@@ -1,14 +1,14 @@
-# Raycast Vehicle Sample
+# Raycast RC Car
 
 Play the live demo: <https://raycast-rc-car.netlify.app/>
 
 [![Raycast vehicle demo](src/assets/demo.jpg)](https://raycast-rc-car.netlify.app/)
 
-Interactive arcade car sample built with [three.js](https://threejs.org) and
+Interactive arcade RC car sample built with [three.js](https://threejs.org) and
 [cannon-es](https://github.com/pmndrs/cannon-es). The car uses a
 `CANNON.RaycastVehicle` chassis with GLB visuals, a GLB driving level,
-post-processing effects, keyboard/touch/gamepad controls, and a live tuning
-panel.
+post-processing effects, mobile, desktop, and browser Gamepad API controls,
+plus a live tuning panel.
 
 The physics approach is inspired by [Bruno Simon's portfolio](https://bruno-simon.com/)
 and [swift502/Sketchbook](https://github.com/swift502/Sketchbook): each wheel is
@@ -41,8 +41,9 @@ Then open http://localhost:5173.
 
 ### Touch (phones/tablets)
 
-An on-screen joystick (right) drives and steers; the lightning button (left)
-boosts. The tuning panel is hidden on touch devices.
+An on-screen joystick (right) drives and steers, the lightning button (left)
+boosts, and the small top-left reset button respawns the car. The tuning panel
+is hidden on touch devices.
 
 ### Gamepad
 
@@ -85,7 +86,8 @@ default) to tweak everything live. It is organized into:
   assists, and jump
 - **Camera** — FOV and clipping
 - **World** — environment height, teleporter, lighting & shadows
-- **Effects** — post processing and tire marks
+- **Effects** — post processing and tire marks, including rear track spacing
+  and forward offset
 - **Models** — visual-only GLB transforms for the body and wheels
 - **Debug** — FPS readout and physics collider wireframes
 
@@ -101,11 +103,14 @@ Defaults live in `DEFAULT_PARAMS` at the top of `src/Vehicle.js`. Highlights:
 - `jumpImpulse`, `airborneGravityScale` — jump height and how floaty it feels
 - `inertiaScale`, `antiWheelie`, `tiltClampAirborne`, `uprightAssist`,
   `wallSlideAssist` — the arcade stability assists
+- `backWidth`, `backSpacing`, `backForwardOffset` — rear tire mark placement
+  and shape
 
 ## Project structure
 
 ```
 index.html          HUD, mobile controls, and styles
+public/og-image.jpg Social share preview image
 src/main.js         Renderer, camera, post-processing, GUI, input, game loop
 src/Vehicle.js      Car physics, controls, visuals, tire marks
 src/World.js        Level loading, trimesh colliders, lights and shadows
