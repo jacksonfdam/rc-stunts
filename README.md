@@ -1,12 +1,14 @@
 # Raycast Vehicle Sample
 
-[![Raycast vehicle demo](src/assets/demo.jpg)](src/assets/demo.jpg)
+[![Raycast vehicle demo](src/assets/demo.jpg)](https://raycast-rc-car.netlify.app/)
 
 Interactive arcade car sample built with [three.js](https://threejs.org) and
 [cannon-es](https://github.com/pmndrs/cannon-es). The car uses a
 `CANNON.RaycastVehicle` chassis with GLB visuals, a GLB driving level,
 post-processing effects, keyboard/touch/gamepad controls, and a live tuning
 panel.
+
+Play the live demo: <https://raycast-rc-car.netlify.app/>
 
 The physics approach is inspired by [Bruno Simon's portfolio](https://bruno-simon.com/)
 and [swift502/Sketchbook](https://github.com/swift502/Sketchbook): each wheel is

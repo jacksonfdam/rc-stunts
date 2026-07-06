@@ -101,12 +101,9 @@ const camera = new THREE.PerspectiveCamera(
 )
 camera.position.set(0, 6, -10)
 
-// GTAO renders extra depth/normal buffers each frame — too heavy for phones
-const isCoarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false
-
 const DEFAULT_POST_PARAMS = {
   enabled: true,
-  aoEnabled: !isCoarsePointer,
+  aoEnabled: false,
   aoIntensity: 1.5,
   aoRadius: 2,
   // When on, scales the AO kernel with on-screen size instead of a fixed
@@ -1185,17 +1182,18 @@ document.addEventListener('fullscreenchange', () => {
 
 const mobileJoystick = document.querySelector('#mobile-joystick')
 const mobileBoost = document.querySelector('#mobile-boost')
+const mobileReset = document.querySelector('#mobile-reset')
 let mobileJoystickActive = false
 
 function shapeMobileAxis(value) {
   const sign = Math.sign(value)
-  return sign * Math.pow(Math.abs(value), 1.45)
+  return sign * Math.pow(Math.abs(value), 1.7)
 }
 
 function setMobileJoystickInput(x, y) {
-  const deadzone = 0.16
-  const steer = Math.abs(x) < deadzone ? 0 : shapeMobileAxis(x)
-  const throttle = Math.abs(y) < deadzone ? 0 : shapeMobileAxis(y)
+  const deadzone = 0.2
+  const steer = Math.abs(x) < deadzone ? 0 : shapeMobileAxis(x) * 0.76
+  const throttle = Math.abs(y) < deadzone ? 0 : shapeMobileAxis(y) * 0.9
 
   vehicle.input.steerAxis = steer
   vehicle.input.throttleAxis = throttle
@@ -1271,6 +1269,15 @@ if (mobileBoost) {
     setBoost(false)
   })
   mobileBoost.addEventListener('pointercancel', () => setBoost(false))
+}
+
+if (mobileReset) {
+  mobileReset.addEventListener('pointerdown', (event) => {
+    event.preventDefault()
+    vehicle.respawn()
+    resetMobileJoystick()
+    mobileReset.blur()
+  })
 }
 
 // --- Gamepad controls ----------------------------------------------------------

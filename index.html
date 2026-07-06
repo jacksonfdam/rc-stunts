@@ -4,6 +4,28 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Vehicle Controller — three.js + cannon-es</title>
+    <meta
+      name="description"
+      content="Drive a physics-based RC car around a three.js playground with jumps, loops, boost, and touch controls."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://raycast-rc-car.netlify.app/" />
+    <meta property="og:title" content="Raycast RC Car" />
+    <meta
+      property="og:description"
+      content="Drive a physics-based RC car around a three.js playground with jumps, loops, boost, and touch controls."
+    />
+    <meta property="og:image" content="https://raycast-rc-car.netlify.app/og-image.jpg" />
+    <meta property="og:image:width" content="1024" />
+    <meta property="og:image:height" content="614" />
+    <meta property="og:image:alt" content="An RC car on a colorful three.js stunt course." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Raycast RC Car" />
+    <meta
+      name="twitter:description"
+      content="Drive a physics-based RC car around a three.js playground with jumps, loops, boost, and touch controls."
+    />
+    <meta name="twitter:image" content="https://raycast-rc-car.netlify.app/og-image.jpg" />
     <style>
       * {
         margin: 0;
@@ -17,6 +39,7 @@
         overflow: hidden;
         font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
         background: #1b1b2a;
+        -webkit-tap-highlight-color: transparent;
       }
 
       #app {
@@ -90,6 +113,8 @@
         font-size: 17px;
         font-weight: 700;
         transition: background 0.15s, transform 0.1s;
+        user-select: none;
+        -webkit-user-select: none;
       }
 
       .ui-btn:hover {
@@ -206,6 +231,10 @@
           bottom: auto;
         }
 
+        #title {
+          display: none;
+        }
+
         #mobile-controls {
           position: fixed;
           inset: 0;
@@ -214,6 +243,40 @@
           pointer-events: none;
           touch-action: none;
           user-select: none;
+          -webkit-touch-callout: none;
+          -webkit-user-select: none;
+        }
+
+        #mobile-controls * {
+          user-select: none;
+          -webkit-user-select: none;
+          -webkit-touch-callout: none;
+        }
+
+        #mobile-reset {
+          position: absolute;
+          left: 16px;
+          top: 16px;
+          min-width: 68px;
+          height: 38px;
+          padding: 0 14px;
+          pointer-events: auto;
+          touch-action: none;
+          color: rgba(255, 255, 255, 0.9);
+          background: rgba(8, 10, 18, 0.34);
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          border-radius: 999px;
+          backdrop-filter: blur(12px);
+          font: inherit;
+          font-size: 13px;
+          font-weight: 800;
+          letter-spacing: 0.4px;
+          text-transform: uppercase;
+        }
+
+        #mobile-reset:active {
+          transform: scale(0.96);
+          background: rgba(255, 255, 255, 0.14);
         }
 
         #mobile-joystick {
@@ -322,7 +385,8 @@
       <div class="unit">speed</div>
     </div>
 
-    <div id="mobile-controls" aria-hidden="true">
+    <div id="mobile-controls">
+      <button id="mobile-reset" type="button" aria-label="Reset car">Reset</button>
       <div id="mobile-joystick">
         <div class="stick"></div>
       </div>
