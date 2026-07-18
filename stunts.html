@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stunts — web port (track viewer)</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { height: 100%; overflow: hidden; background: #0b1020;
+        font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif; color: #e5e7eb; }
+      #app { position: fixed; inset: 0; }
+      #app canvas { display: block; }
+
+      #panel {
+        position: fixed; top: 12px; left: 12px; z-index: 10;
+        background: rgba(15, 23, 42, 0.82); backdrop-filter: blur(6px);
+        border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 10px;
+        padding: 12px 14px; font-size: 13px; line-height: 1.5; max-width: 260px;
+      }
+      #panel h1 { font-size: 15px; margin-bottom: 6px; }
+      #panel .row { color: #94a3b8; }
+      #panel .row b { color: #e5e7eb; font-weight: 700; }
+      #panel label {
+        display: inline-block; margin-top: 10px; cursor: pointer;
+        background: #2563eb; color: #fff; padding: 6px 10px; border-radius: 8px; font-weight: 700;
+      }
+      #panel input[type="file"] { display: none; }
+      #panel .hint { margin-top: 8px; font-size: 11px; color: #64748b; }
+
+      #speed {
+        position: fixed; bottom: 16px; right: 20px; z-index: 10;
+        font-weight: 800; font-size: 40px; text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+      }
+      #speed span { font-size: 16px; color: #94a3b8; margin-left: 4px; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="panel">
+      <h1>Stunts · Web Port</h1>
+      <div class="row">Track: <b id="track-name">demo loop</b></div>
+      <div class="row">Horizon: <b id="horizon-name">—</b></div>
+      <div class="row">Tiles: <b id="tile-count">0</b></div>
+      <label for="trk-file">Load .TRK…</label>
+      <input id="trk-file" type="file" accept=".trk,.TRK" />
+      <div class="hint">WASD / arrows to drive · Shift boost · Space jump · R respawn</div>
+    </div>
+
+    <div id="speed"><b id="speed-value">0</b><span>km/h</span></div>
+
+    <script type="module" src="/src/stunts/main.js"></script>
+  </body>
+</html>
