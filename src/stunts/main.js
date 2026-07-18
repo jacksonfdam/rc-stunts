@@ -101,27 +101,65 @@ loadTrack(createDemoTrackFile(), 'demo loop')
 const trackUrls = import.meta.glob('./tracks/*.trk', { query: '?url', import: 'default', eager: true })
 
 const trackSelect = document.getElementById('track-select')
-const entries = Object.entries(trackUrls)
-  .map(([path, url]) => ({ name: path.split('/').pop().replace(/\.trk$/i, ''), url }))
-  .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+// Parsed tracks are cached by url so selecting one loads instantly (the .trk
+// bytes are inlined as data URIs, so this "fetch" never hits the network).
+const trackCache = new Map()
 
-const placeholder = document.createElement('option')
-placeholder.value = ''
-placeholder.textContent = `— ${entries.length} bundled tracks —`
-trackSelect.append(placeholder)
-for (const { name, url } of entries) {
-  const option = document.createElement('option')
-  option.value = url
-  option.textContent = name
-  trackSelect.append(option)
+// The .TRK format stores no track name — only the 30x30 grid — and the site
+// files were saved under sequential codes (r4k0…), so there's no real name to
+// show. Instead we label each entry with its horizon + drivable tile count,
+// parsed from the file, and group the list by horizon so tracks are easy to
+// tell apart.
+async function buildTrackPicker() {
+  const parsed = await Promise.all(
+    Object.entries(trackUrls).map(async ([path, url]) => {
+      const code = path.split('/').pop().replace(/\.trk$/i, '')
+      const buffer = await (await fetch(url)).arrayBuffer()
+      const tf = TrackFile.parse(buffer)
+      trackCache.set(url, { tf, code })
+      return { code, url, horizon: tf.horizonName, tiles: countDrivable(tf) }
+    })
+  )
+
+  const placeholder = document.createElement('option')
+  placeholder.value = ''
+  placeholder.textContent = `— ${parsed.length} bundled tracks —`
+  trackSelect.append(placeholder)
+
+  // One <optgroup> per horizon; entries sorted by code within each.
+  const byHorizon = new Map()
+  for (const e of parsed) {
+    if (!byHorizon.has(e.horizon)) byHorizon.set(e.horizon, [])
+    byHorizon.get(e.horizon).push(e)
+  }
+  for (const horizon of [...byHorizon.keys()].sort()) {
+    const group = document.createElement('optgroup')
+    group.label = horizon
+    const list = byHorizon
+      .get(horizon)
+      .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+    for (const { code, url, tiles } of list) {
+      const option = document.createElement('option')
+      option.value = url
+      option.textContent = `${code} · ${tiles} tiles`
+      group.append(option)
+    }
+    trackSelect.append(group)
+  }
 }
 
 trackSelect.addEventListener('change', async (event) => {
   const url = event.target.value
   if (!url) return
-  const buffer = await (await fetch(url)).arrayBuffer()
-  loadTrack(TrackFile.parse(buffer), event.target.selectedOptions[0].textContent)
+  let cached = trackCache.get(url)
+  if (!cached) {
+    const buffer = await (await fetch(url)).arrayBuffer()
+    cached = { tf: TrackFile.parse(buffer), code: url }
+  }
+  loadTrack(cached.tf, cached.code)
 })
+
+buildTrackPicker()
 
 // Load a real .TRK from disk.
 document.getElementById('trk-file').addEventListener('change', async (event) => {
