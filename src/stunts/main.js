@@ -95,11 +95,40 @@ function loadTrack(trackFile, name) {
 
 loadTrack(createDemoTrackFile(), 'demo loop')
 
+// --- Bundled community tracks ------------------------------------------------
+// Vite resolves every .trk under tracks/ to a served URL at build time, so the
+// picker works in both dev and the production build without a manifest.
+const trackUrls = import.meta.glob('./tracks/*.trk', { query: '?url', import: 'default', eager: true })
+
+const trackSelect = document.getElementById('track-select')
+const entries = Object.entries(trackUrls)
+  .map(([path, url]) => ({ name: path.split('/').pop().replace(/\.trk$/i, ''), url }))
+  .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+
+const placeholder = document.createElement('option')
+placeholder.value = ''
+placeholder.textContent = `— ${entries.length} bundled tracks —`
+trackSelect.append(placeholder)
+for (const { name, url } of entries) {
+  const option = document.createElement('option')
+  option.value = url
+  option.textContent = name
+  trackSelect.append(option)
+}
+
+trackSelect.addEventListener('change', async (event) => {
+  const url = event.target.value
+  if (!url) return
+  const buffer = await (await fetch(url)).arrayBuffer()
+  loadTrack(TrackFile.parse(buffer), event.target.selectedOptions[0].textContent)
+})
+
 // Load a real .TRK from disk.
 document.getElementById('trk-file').addEventListener('change', async (event) => {
   const file = event.target.files?.[0]
   if (!file) return
   const buffer = await file.arrayBuffer()
+  trackSelect.value = ''
   loadTrack(TrackFile.parse(buffer), file.name)
 })
 

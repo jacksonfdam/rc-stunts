@@ -25,6 +25,11 @@
         background: #2563eb; color: #fff; padding: 6px 10px; border-radius: 8px; font-weight: 700;
       }
       #panel input[type="file"] { display: none; }
+      #panel select {
+        display: block; width: 100%; margin-top: 10px; padding: 6px 8px;
+        background: #0f172a; color: #e5e7eb; font: inherit; font-size: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 8px; cursor: pointer;
+      }
       #panel .hint { margin-top: 8px; font-size: 11px; color: #64748b; }
 
       #speed {
@@ -42,7 +47,8 @@
       <div class="row">Track: <b id="track-name">demo loop</b></div>
       <div class="row">Horizon: <b id="horizon-name">—</b></div>
       <div class="row">Tiles: <b id="tile-count">0</b></div>
-      <label for="trk-file">Load .TRK…</label>
+      <select id="track-select" title="Pick a bundled community track"></select>
+      <label for="trk-file">Load .TRK from disk…</label>
       <input id="trk-file" type="file" accept=".trk,.TRK" />
       <div class="hint">WASD / arrows to drive · Shift boost · Space jump · R respawn</div>
     </div>
