@@ -26,7 +26,9 @@ const GROUND_Y = 0
 const ROAD_H = 0.5 // flat slab thickness
 const ELEV_H = 6 // height of raised/elevated pieces
 const RAMP_RISE = ELEV_H // vertical rise across one ramp tile
-const INSET = 0.94 // shrink tiles slightly so seams read as a grid
+// Road pieces span the full tile so adjacent cells butt flush into one
+// continuous ribbon, as in the original game — no gaps between road blocks.
+const INSET = 1.0
 
 export class StuntsTrack {
   constructor(scene, physicsWorld, trackFile) {
