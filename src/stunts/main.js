@@ -190,6 +190,17 @@ function updateCamera(delta) {
   camera.lookAt(currentTarget)
 }
 
+// --- Debug: top-down view ----------------------------------------------------
+// Exposes the scene and a persistent top-down camera toggle so track layout /
+// piece orientation can be inspected (and screenshotted) from above.
+const debug = { topView: false, topY: 820, topX: 0, topZ: 0 }
+const sceneFog = scene.fog
+function updateTopView() {
+  camera.position.set(debug.topX, debug.topY, debug.topZ + 0.01)
+  camera.lookAt(debug.topX, 0, debug.topZ)
+}
+window.__stunts = { scene, camera, renderer, debug, get track() { return track } }
+
 // --- Loop --------------------------------------------------------------------
 
 const FIXED_STEP = 1 / 60
@@ -203,7 +214,10 @@ function tick() {
 
   physicsWorld.step(FIXED_STEP, delta, 3)
   vehicle.update(delta)
-  updateCamera(delta)
+  if (debug.topView) updateTopView()
+  else updateCamera(delta)
+  // Fog would hide the whole track from the high top-down camera.
+  scene.fog = debug.topView ? null : sceneFog
 
   // Keep the sun/shadow frustum centred on the car.
   sun.position.set(

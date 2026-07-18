@@ -116,6 +116,29 @@ const RANGES = [
   [0xb3, 0xb5, C.START, S.PAVED, 1],
 ]
 
+// Exact orientation per id, as a quadrant (1=NE, 2=NW, 3=SW, 4=SE) indexed by
+// (id - rangeStart). Straights use two axis orientations; corners cycle through
+// the four turn directions; ramps ascend along one of four directions. Values
+// are the authoritative sequences from the cross-verified element table; ids not
+// listed here are orientation-agnostic (flat squares, props) and default to Q2.
+// Keyed by the range's low id.
+const QUADS = {
+  0x04: [2, 1], // straight (paved)
+  0x0e: [2, 1], // straight (dirt)
+  0x18: [2, 1], // straight (ice)
+  0x22: [2, 1], // elevated road
+  0x06: [2, 1, 3, 4], // sharp corner (paved)
+  0x0a: [2, 1, 3, 4], // large corner (paved)
+  0x10: [2, 1, 3, 4], // sharp corner (dirt)
+  0x14: [2, 1, 3, 4], // large corner (dirt)
+  0x1a: [2, 1, 3, 4], // sharp corner (ice)
+  0x1e: [2, 1, 3, 4], // large corner (ice)
+  0x69: [2, 1, 3, 4], // elevated corner
+  0x24: [1, 3, 2, 4], // elevated ramp / incline
+  0x38: [1, 3, 2, 4], // bridge ramp
+  0x5f: [1, 3, 2, 4], // solid ramp
+}
+
 // Which scenery prop each 0x97–0x9A id is (for prop rendering).
 export const SCENERY_KIND = { 0x97: 'palm', 0x98: 'cactus', 0x99: 'pine', 0x9a: 'tennis' }
 
@@ -137,28 +160,28 @@ function lookupRange(id) {
  */
 export function describeElement(id) {
   if (id === 0x00) {
-    return base(id, C.EMPTY, S.NONE, 0, 1, { empty: true })
+    return base(id, C.EMPTY, S.NONE, 2, 1, { empty: true })
   }
   if (FILLERS.has(id)) {
     // Continuation cell of a multi-tile piece. Render as flat road so the
     // piece's footprint stays gapless and drivable; the corner it fills is
     // recorded in case a later pass wants exact multi-tile geometry.
     const corner = id === 0xff ? 'NE' : id === 0xfe ? 'SW' : 'SE'
-    return base(id, C.FILLER, S.PAVED, 0, 1, { filler: true, fillerCorner: corner })
+    return base(id, C.FILLER, S.PAVED, 2, 1, { filler: true, fillerCorner: corner })
   }
 
   const range = lookupRange(id)
   if (!range) {
     // 0xB6–0xFC and any gap: internal render artifacts, not real pieces.
-    return base(id, C.UNKNOWN, S.NONE, 0, 1, { empty: true })
+    return base(id, C.UNKNOWN, S.NONE, 2, 1, { empty: true })
   }
 
   const [lo, , category, surface, size] = range
-  const orient = (id - lo) % 4
-  return base(id, category, surface, orient, size, {})
+  const quadrant = QUADS[lo]?.[id - lo] ?? 2
+  return base(id, category, surface, quadrant, size, {})
 }
 
-function base(id, category, surface, orient, size, flags) {
+function base(id, category, surface, quadrant, size, flags) {
   const empty = flags.empty ?? false
   const filler = flags.filler ?? false
   const prop = category === CATEGORY.SCENERY || category === CATEGORY.BUILDING
@@ -171,7 +194,8 @@ function base(id, category, surface, orient, size, flags) {
     id,
     category,
     surface,
-    orient,
+    quadrant, // 1=NE, 2=NW, 3=SW, 4=SE
+    orient: quadrant - 1, // legacy 0-based index for undirected pieces
     size,
     empty,
     filler,
