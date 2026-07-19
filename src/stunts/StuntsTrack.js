@@ -545,19 +545,19 @@ export class StuntsTrack {
     this.group.add(strip)
 
     // Two posts and a checkered banner across the top.
-    const postGeo = new THREE.CylinderGeometry(0.4, 0.4, 9, 8)
+    const postGeo = new THREE.CylinderGeometry(0.35, 0.35, 6.5, 8)
     const postMat = this._material(0xe5e7eb)
     for (const s of [-1, 1]) {
       const post = new THREE.Mesh(postGeo, postMat)
-      post.position.set(c.x + ax * half * s, GROUND_Y + 4.5, c.z + az * half * s)
+      post.position.set(c.x + ax * half * s, GROUND_Y + 3.25, c.z + az * half * s)
       post.castShadow = true
       this.group.add(post)
     }
     const banner = new THREE.Mesh(
-      new THREE.PlaneGeometry(TILE, 2.4),
+      new THREE.PlaneGeometry(TILE, 1.8),
       new THREE.MeshStandardMaterial({ map: this._checkerTexture(10, 2), roughness: 0.7, side: THREE.DoubleSide })
     )
-    banner.position.set(c.x, GROUND_Y + 8, c.z)
+    banner.position.set(c.x, GROUND_Y + 5.7, c.z)
     banner.rotation.y = yaw
     banner.castShadow = true
     this.group.add(banner)

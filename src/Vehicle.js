@@ -673,7 +673,11 @@ export class Vehicle {
       const root = this.wheelVisualRoots[i]
       root.clear()
       if (on) {
-        root.add(this._makeSimpleWheel())
+        const w = this._makeSimpleWheel()
+        // Tuck the wheel inward (toward the car centre) so it doesn't stick out
+        // past a sleek body. Left wheels are i even, right wheels i odd.
+        w.position.x = (i % 2 === 0 ? 1 : -1) * WHEEL_RADIUS * 1.1
+        root.add(w)
       } else if (this._rcWheels[i]) {
         root.add(this._rcWheels[i])
       }
