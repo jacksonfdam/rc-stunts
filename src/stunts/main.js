@@ -610,10 +610,13 @@ function applyCar(car, swapModel) {
   vehicle.params.maxSpeedKmh = car.maxSpeedKmh
   if (swapModel && car.url) {
     vehicle.bodyModelParams.rotationY = car.rotY ?? 0
+    // Drop full-car bodies down so they sit on the wheels instead of hovering
+    // above them (the RC buggy is modelled centred, so it keeps offset 0).
+    vehicle.bodyModelParams.offsetY = car.url === baseCarUrl ? 0 : car.offsetY ?? -1.1
     vehicle.setBodyModel(car.url)
-    // Full-car models bring their own wheels; only the RC buggy uses the
-    // separate raycast wheel visuals.
-    vehicle.setWheelsVisible(car.url === baseCarUrl)
+    // The low-poly car GLBs are body shells with no wheels, so always keep the
+    // raycast wheel visuals (they touch the ground, steer and spin).
+    vehicle.setWheelsVisible(true)
   }
 }
 
