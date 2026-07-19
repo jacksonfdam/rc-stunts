@@ -58,6 +58,7 @@ export class StuntsTrack {
     this.start = this._findStart()
     this.route = []
     this._buildRoute()
+    this._buildStartLine()
   }
 
   /** World-space centre of grid tile (x, y). y counts from the bottom row. */
@@ -115,13 +116,6 @@ export class StuntsTrack {
 
   _buildPiece(el, center, x, y) {
     switch (el.category) {
-      case CATEGORY.RAMP:
-        this._addRamp(el, center)
-        break
-      case CATEGORY.ELEVATED:
-      case CATEGORY.ELEVATED_CORNER:
-        this._addElevated(el, center)
-        break
       case CATEGORY.LOOP:
         this._addLoop(el, center)
         break
@@ -487,7 +481,9 @@ export class StuntsTrack {
     const centre = new THREE.Vector3()
     for (let step = 0; step < GRID * GRID; step++) {
       this.tileToWorld(cur.x, cur.y, centre)
-      route.push(new THREE.Vector3(centre.x, this._tileHeight(cur.x, cur.y) + 1.5, centre.z))
+      // Route y = the road surface height at this tile; the opponent car's mesh
+      // is modelled with its wheels' contact at its own origin, so it sits flush.
+      route.push(new THREE.Vector3(centre.x, this._tileHeight(cur.x, cur.y), centre.z))
       visited.add(key(cur))
 
       const cands = DIRS.map(([dx, dy]) => ({ x: cur.x + dx, y: cur.y + dy, dx, dy })).filter(
@@ -504,6 +500,70 @@ export class StuntsTrack {
       if (route.length > 3 && cur.x === start.x && cur.y === start.y) break
     }
     this.route = route
+  }
+
+  /** A fresh 2×2 checker texture (repeat it to get the square count you want). */
+  _checkerTexture(repeatX, repeatY) {
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = 32
+    const ctx = canvas.getContext('2d')
+    const s = 16
+    for (let i = 0; i < 2; i++) {
+      for (let j = 0; j < 2; j++) {
+        ctx.fillStyle = (i + j) % 2 ? '#111318' : '#f8fafc'
+        ctx.fillRect(i * s, j * s, s, s)
+      }
+    }
+    const tex = new THREE.CanvasTexture(canvas)
+    tex.wrapS = THREE.RepeatWrapping
+    tex.wrapT = THREE.RepeatWrapping
+    tex.repeat.set(repeatX, repeatY)
+    tex.anisotropy = 4
+    return tex
+  }
+
+  /** Checkered start/finish line on the road plus a checkered banner overhead. */
+  _buildStartLine() {
+    if (!this.startCell) return
+    const c = this.tileToWorld(this.startCell.x, this.startCell.y, new THREE.Vector3())
+    let yaw = 0
+    if (this.route.length >= 2) {
+      const f = this.route[1].clone().sub(this.route[0])
+      yaw = Math.atan2(f.x, f.z) // car forward (+Z) → (sin, cos)
+    }
+    const ax = Math.cos(yaw) // horizontal axis across the track
+    const az = -Math.sin(yaw)
+    const half = TILE * 0.5
+
+    // Checkered strip painted flat on the road, spanning the track width.
+    const stripGeo = new THREE.PlaneGeometry(TILE, TILE * 0.35)
+    stripGeo.rotateX(-Math.PI / 2)
+    const strip = new THREE.Mesh(
+      stripGeo,
+      new THREE.MeshStandardMaterial({ map: this._checkerTexture(8, 2), roughness: 0.7 })
+    )
+    strip.position.set(c.x, GROUND_Y + ROAD_H + 0.04, c.z)
+    strip.rotation.y = yaw
+    strip.receiveShadow = true
+    this.group.add(strip)
+
+    // Two posts and a checkered banner across the top.
+    const postGeo = new THREE.CylinderGeometry(0.4, 0.4, 9, 8)
+    const postMat = this._material(0xe5e7eb)
+    for (const s of [-1, 1]) {
+      const post = new THREE.Mesh(postGeo, postMat)
+      post.position.set(c.x + ax * half * s, GROUND_Y + 4.5, c.z + az * half * s)
+      post.castShadow = true
+      this.group.add(post)
+    }
+    const banner = new THREE.Mesh(
+      new THREE.PlaneGeometry(TILE, 2.4),
+      new THREE.MeshStandardMaterial({ map: this._checkerTexture(10, 2), roughness: 0.7, side: THREE.DoubleSide })
+    )
+    banner.position.set(c.x, GROUND_Y + 8, c.z)
+    banner.rotation.y = yaw
+    banner.castShadow = true
+    this.group.add(banner)
   }
 
   dispose() {

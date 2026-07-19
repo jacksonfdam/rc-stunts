@@ -110,21 +110,23 @@ function buildOpponentCar() {
     new THREE.BoxGeometry(3.4, 1.1, 6),
     new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.4, metalness: 0.1 })
   )
-  body.position.y = 1.1
+  // Modelled with wheel-contact at the group origin (y=0) so placing the group
+  // on the road surface sits it flush (wheel radius 1 → centre at y=1).
+  body.position.y = 1.6
   body.castShadow = true
   g.add(body)
   const cabin = new THREE.Mesh(
     new THREE.BoxGeometry(2.6, 0.9, 2.6),
     new THREE.MeshStandardMaterial({ color: 0xdbeafe, roughness: 0.3 })
   )
-  cabin.position.set(0, 1.9, -0.2)
+  cabin.position.set(0, 2.4, -0.2)
   g.add(cabin)
   const wheelGeo = new THREE.CylinderGeometry(1, 1, 0.8, 12)
   wheelGeo.rotateZ(Math.PI / 2)
   const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111318, roughness: 0.8 })
   for (const [x, z] of [[-1.8, 2], [1.8, 2], [-1.8, -2], [1.8, -2]]) {
     const w = new THREE.Mesh(wheelGeo, wheelMat)
-    w.position.set(x, 0.9, z)
+    w.position.set(x, 1, z)
     g.add(w)
   }
   return g
@@ -145,6 +147,8 @@ function resetOpponent() {
 
 function updateOpponent(delta) {
   if (!opponent.active) return
+  // Hold at the start line until the race begins (menu closed).
+  if (!menuEl.classList.contains('hidden')) return
   const route = track.route
   let remaining = opponent.speed * delta
   // Walk forward along the route by `remaining` world units.
@@ -674,6 +678,7 @@ function startDriving() {
   debug.topView = false
   vehicle.respawn()
   resetTimer()
+  resetOpponent() // opponent starts fresh alongside the player
 }
 
 menuTrack.addEventListener('change', (event) => {
