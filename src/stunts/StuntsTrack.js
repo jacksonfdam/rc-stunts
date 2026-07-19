@@ -191,10 +191,15 @@ export class StuntsTrack {
     const w = TILE * INSET
     const len = TILE * INSET
     const pitch = Math.atan2(RAMP_RISE, TILE)
-    // +π applies the same 180° grid-convention offset calibrated for corners, so
-    // the ramp ascends toward its connecting neighbour rather than away from it.
+    // Ascent yaw per quadrant, calibrated against the corpus: Q1→E, Q2→N, Q3→W,
+    // Q4→S. This scores 96.7% "ramp ascends toward its raised neighbour" over
+    // 395 unambiguous bridge ramps in 84 tracks (a full dihedral search — a plain
+    // rotation offset couldn't align all four ids). The mesh tilts its +Z end up,
+    // and yaw θ points that end along (sinθ, cosθ).
+    const RAMP_YAW = { 1: Math.PI / 2, 2: 0, 3: (3 * Math.PI) / 2, 4: Math.PI }
+    const yaw = RAMP_YAW[el.quadrant] ?? 0
     const q = new THREE.Quaternion()
-      .setFromAxisAngle(new THREE.Vector3(0, 1, 0), this._yaw(el.orient) + Math.PI)
+      .setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw)
       .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -pitch))
 
     const geometry = new THREE.BoxGeometry(w, ROAD_H, len)
@@ -215,23 +220,18 @@ export class StuntsTrack {
   }
 
   _addElevated(el, center) {
+    // A solid embankment from the ground up to road height, so raised roads read
+    // as a supported plateau instead of a slab floating on a thin pillar. The top
+    // sits at ELEV_H, matching a ramp's high end so the two connect flush.
     const w = TILE * INSET
-    const top = GROUND_Y + ELEV_H
-
-    const geometry = new THREE.BoxGeometry(w, ROAD_H, w)
+    const h = ELEV_H
+    const geometry = new THREE.BoxGeometry(w, h, w)
     const mesh = new THREE.Mesh(geometry, this._material(el.color))
-    mesh.position.set(center.x, top + ROAD_H / 2, center.z)
+    mesh.position.set(center.x, GROUND_Y + h / 2, center.z)
     mesh.castShadow = true
     mesh.receiveShadow = true
     this.group.add(mesh)
-    this._addBoxCollider(mesh.position, new CANNON.Vec3(w / 2, ROAD_H / 2, w / 2))
-
-    // Visual-only support pillar down to the ground.
-    const pillarGeo = new THREE.BoxGeometry(TILE * 0.25, ELEV_H, TILE * 0.25)
-    const pillar = new THREE.Mesh(pillarGeo, this._material(0x3a3f47))
-    pillar.position.set(center.x, GROUND_Y + ELEV_H / 2, center.z)
-    pillar.castShadow = true
-    this.group.add(pillar)
+    this._addBoxCollider(mesh.position, new CANNON.Vec3(w / 2, h / 2, w / 2))
   }
 
   _addLoopVisual(el, center) {

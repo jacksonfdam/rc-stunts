@@ -295,7 +295,7 @@ function tick() {
   physicsWorld.step(FIXED_STEP, delta, 3)
   vehicle.update(delta)
   if (debug.topView) updateTopView()
-  else updateCamera(delta)
+  else if (!debug.freeze) updateCamera(delta)
   // Fog would hide the whole track from the high top-down camera.
   scene.fog = debug.topView ? null : sceneFog
 
