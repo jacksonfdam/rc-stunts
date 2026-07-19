@@ -342,6 +342,100 @@ function updateCamera(delta) {
   camera.lookAt(currentTarget)
 }
 
+// --- Cockpit view (press C to toggle) ----------------------------------------
+
+let cameraMode = 'chase'
+const cockpitEl = document.getElementById('cockpit')
+const eyeOffset = new THREE.Vector3(0, 1.5, 0.0) // driver's eyeline inside the car
+const cockpitLookOffset = new THREE.Vector3(0, 1.1, 10)
+const cockpitEye = new THREE.Vector3()
+const cockpitTarget = new THREE.Vector3()
+
+function setCameraMode(mode) {
+  cameraMode = mode
+  const cockpit = mode === 'cockpit'
+  cockpitEl.classList.toggle('hidden', !cockpit)
+  vehicle.group.visible = !cockpit // don't render the car body from inside it
+  camera.fov = cockpit ? 74 : 60
+  camera.updateProjectionMatrix()
+}
+
+function updateCockpit(delta) {
+  const chassis = vehicle.group
+  cockpitEye.copy(eyeOffset).applyQuaternion(chassis.quaternion).add(chassis.position)
+  cockpitTarget.copy(cockpitLookOffset).applyQuaternion(chassis.quaternion).add(chassis.position)
+  camera.position.lerp(cockpitEye, 1 - Math.exp(-35 * delta))
+  camera.lookAt(cockpitTarget)
+}
+
+// --- Windshield crack on a hard crash ----------------------------------------
+
+const crackEl = document.getElementById('crack')
+const SVG_NS = 'http://www.w3.org/2000/svg'
+let prevSpeed = 0
+let crackTimer = 0
+
+function addCrackLine(x1, y1, x2, y2, w) {
+  const l = document.createElementNS(SVG_NS, 'line')
+  l.setAttribute('x1', x1)
+  l.setAttribute('y1', y1)
+  l.setAttribute('x2', x2)
+  l.setAttribute('y2', y2)
+  l.setAttribute('stroke-width', w)
+  crackEl.appendChild(l)
+}
+
+function triggerCrack() {
+  while (crackEl.firstChild) crackEl.removeChild(crackEl.firstChild)
+  // Draw in pixel space matched to the viewport (robust; avoids non-uniform
+  // viewBox stroke bugs).
+  const W = window.innerWidth
+  const H = window.innerHeight
+  crackEl.setAttribute('viewBox', `0 0 ${W} ${H}`)
+  const cx = W * (0.35 + Math.random() * 0.3)
+  const cy = H * (0.28 + Math.random() * 0.26)
+  const maxLen = Math.min(W, H)
+  const spokes = 12 + Math.floor(Math.random() * 6)
+  const tips = []
+  for (let i = 0; i < spokes; i++) {
+    const ang = (i / spokes) * Math.PI * 2 + (Math.random() - 0.5) * 0.3
+    const len = maxLen * (0.35 + Math.random() * 0.6)
+    const steps = 3 + Math.floor(Math.random() * 3)
+    let px = cx
+    let py = cy
+    for (let s = 1; s <= steps; s++) {
+      const r = (len * s) / steps
+      const j = (Math.random() - 0.5) * maxLen * 0.07
+      const nx = cx + Math.cos(ang) * r + Math.cos(ang + 1.57) * j
+      const ny = cy + Math.sin(ang) * r + Math.sin(ang + 1.57) * j
+      addCrackLine(px, py, nx, ny, 1.4 + Math.random() * 1.8)
+      px = nx
+      py = ny
+    }
+    tips.push([cx + Math.cos(ang) * len * 0.55, cy + Math.sin(ang) * len * 0.55])
+  }
+  // Concentric web connecting adjacent spokes.
+  for (let i = 0; i < tips.length; i++) {
+    if (Math.random() < 0.65) {
+      const a = tips[i]
+      const b = tips[(i + 1) % tips.length]
+      addCrackLine(a[0], a[1], b[0], b[1], 1.1)
+    }
+  }
+  crackEl.classList.add('show')
+  crackTimer = 2.6
+}
+
+function clearCrack() {
+  crackEl.classList.remove('show')
+  crackTimer = 0
+}
+
+window.addEventListener('keydown', (event) => {
+  if (event.code === 'KeyC') setCameraMode(cameraMode === 'chase' ? 'cockpit' : 'chase')
+  if (event.code === 'KeyR') clearCrack()
+})
+
 // --- Debug: top-down view ----------------------------------------------------
 // Exposes the scene and a persistent top-down camera toggle so track layout /
 // piece orientation can be inspected (and screenshotted) from above.
@@ -351,7 +445,12 @@ function updateTopView() {
   camera.position.set(debug.topX, debug.topY, debug.topZ + 0.01)
   camera.lookAt(debug.topX, 0, debug.topZ)
 }
-window.__stunts = { scene, camera, renderer, vehicle, debug, loadTrack, get track() { return track } }
+window.__stunts = {
+  scene, camera, renderer, vehicle, debug, loadTrack,
+  forceCrack() { triggerCrack(); crackTimer = 9999 },
+  setCameraMode,
+  get track() { return track },
+}
 
 // --- Loop --------------------------------------------------------------------
 
@@ -368,7 +467,10 @@ function tick() {
   vehicle.update(delta)
   updateLoopAssist()
   if (debug.topView) updateTopView()
-  else if (!debug.freeze) updateCamera(delta)
+  else if (debug.freeze) {
+    // manual/frozen camera — leave it where it is
+  } else if (cameraMode === 'cockpit') updateCockpit(delta)
+  else updateCamera(delta)
   // Fog would hide the whole track from the high top-down camera.
   scene.fog = debug.topView ? null : sceneFog
 
@@ -385,6 +487,15 @@ function tick() {
   const driving =
     vehicle.input.forward || vehicle.input.backward || Math.abs(vehicle.input.throttleAxis) > 0.05
   updateTimer(delta, driving, vehicle.group.position)
+
+  // Hard-crash detection: a big one-frame speed drop cracks the windshield.
+  const spd = vehicle.speedKmh
+  if (prevSpeed - spd > 30 && prevSpeed > 35) triggerCrack()
+  prevSpeed = spd
+  if (crackTimer > 0) {
+    crackTimer -= delta
+    if (crackTimer <= 0) clearCrack()
+  }
 
   renderer.render(scene, camera)
   requestAnimationFrame(tick)

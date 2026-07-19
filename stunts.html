@@ -50,6 +50,31 @@
         color: #cbd5e1; text-shadow: 0 1px 4px rgba(0,0,0,0.7); }
       #lap-info b { color: #34d399; }
       #lap-info.hidden { display: none; }
+
+      .hidden { display: none !important; }
+
+      /* Cockpit overlay: A-pillars + dashboard framing the windshield. */
+      #cockpit { position: fixed; inset: 0; z-index: 8; pointer-events: none; }
+      #cockpit .pillar { position: absolute; top: 0; width: 20vw; height: 62vh; background: #0c0f16; }
+      #cockpit .pillar.left { left: 0; clip-path: polygon(0 0, 62% 0, 0 100%); }
+      #cockpit .pillar.right { right: 0; clip-path: polygon(38% 0, 100% 0, 100% 100%); }
+      #cockpit .roof { position: absolute; top: 0; left: 0; right: 0; height: 8vh;
+        background: linear-gradient(#0c0f16, rgba(12,15,22,0)); }
+      #cockpit .dash { position: absolute; left: 0; right: 0; bottom: 0; height: 26vh;
+        background: linear-gradient(#1a1f2b 0%, #0b0e15 55%, #05070c 100%);
+        border-top: 3px solid #05070c;
+        clip-path: polygon(0 22%, 22% 6%, 78% 6%, 100% 22%, 100% 100%, 0 100%); }
+      #cockpit .wheel { position: absolute; bottom: -9vh; left: 50%; transform: translateX(-50%);
+        width: 34vh; height: 34vh; border: 3.2vh solid #14171f; border-radius: 50%;
+        box-shadow: inset 0 0 0 1.2vh #0a0c11; }
+      #cockpit .wheel::after { content: ''; position: absolute; inset: 46% 8% auto 8%;
+        height: 8%; background: #14171f; border-radius: 3px; }
+
+      /* Cracked-windshield overlay, shown on a hard crash. */
+      #crack { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 9;
+        pointer-events: none; opacity: 0; transition: opacity 0.12s ease-out; }
+      #crack.show { opacity: 0.92; }
+      #crack line { stroke: #f8fafc; stroke-linecap: round; }
     </style>
   </head>
   <body>
@@ -73,6 +98,16 @@
     </div>
 
     <div id="speed"><b id="speed-value">0</b><span>km/h</span></div>
+
+    <div id="cockpit" class="hidden">
+      <div class="roof"></div>
+      <div class="pillar left"></div>
+      <div class="pillar right"></div>
+      <div class="dash"></div>
+      <div class="wheel"></div>
+    </div>
+
+    <svg id="crack"></svg>
 
     <script type="module" src="/src/stunts/main.js"></script>
   </body>
