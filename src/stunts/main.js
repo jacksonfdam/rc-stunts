@@ -7,6 +7,15 @@ import { describeElement } from './trackElements.js'
 import { StuntsTrack, TILE } from './StuntsTrack.js'
 import { GRID } from './TrackFile.js'
 
+// Selectable car models (dropped in src/assets, imported as URLs).
+import baseCarUrl from '../assets/base.glb?url'
+import mustangUrl from '../assets/low_poly_ford_mustang.glb?url'
+import gtrUrl from '../assets/low_poly_nissan_gtr.glb?url'
+import camaroUrl from '../assets/low_poly_chevrolet_camaro.glb?url'
+import ferrariUrl from '../assets/low_poly_ferrari_br20.glb?url'
+import z4Url from '../assets/low_poly_bmw_z4_coupe.glb?url'
+import silviaUrl from '../assets/low_poly_nissan_silvia_s15.glb?url'
+
 // --- Renderer & scene --------------------------------------------------------
 
 const container = document.getElementById('app')
@@ -578,9 +587,13 @@ buildSwatches(document.getElementById('menu-colors'))
 // A few tuning presets ("cars") that change engine/top speed live, plus flavour
 // drivers (cosmetic until AI opponents exist).
 const CARS = [
-  { name: 'Rally Buggy', engineForce: 1400, cruiseSpeedKmh: 90, maxSpeedKmh: 140 },
-  { name: 'Sprint GT', engineForce: 1750, cruiseSpeedKmh: 115, maxSpeedKmh: 180 },
-  { name: 'Off-Roader', engineForce: 1250, cruiseSpeedKmh: 78, maxSpeedKmh: 120 },
+  { name: 'RC Buggy', url: baseCarUrl, engineForce: 1400, cruiseSpeedKmh: 90, maxSpeedKmh: 140, rotY: 0 },
+  { name: 'Ford Mustang', url: mustangUrl, engineForce: 1650, cruiseSpeedKmh: 110, maxSpeedKmh: 172, rotY: 0 },
+  { name: 'Nissan GT-R', url: gtrUrl, engineForce: 1750, cruiseSpeedKmh: 122, maxSpeedKmh: 188, rotY: 0 },
+  { name: 'Chevrolet Camaro', url: camaroUrl, engineForce: 1620, cruiseSpeedKmh: 108, maxSpeedKmh: 170, rotY: 0 },
+  { name: 'Ferrari BR20', url: ferrariUrl, engineForce: 1820, cruiseSpeedKmh: 126, maxSpeedKmh: 195, rotY: 0 },
+  { name: 'BMW Z4', url: z4Url, engineForce: 1600, cruiseSpeedKmh: 110, maxSpeedKmh: 174, rotY: 0 },
+  { name: 'Nissan Silvia S15', url: silviaUrl, engineForce: 1560, cruiseSpeedKmh: 106, maxSpeedKmh: 166, rotY: 0 },
 ]
 const DRIVERS = [
   { name: 'Skid Vicious', bio: 'Fearless and fast — takes every jump flat out.' },
@@ -591,10 +604,17 @@ const DRIVERS = [
 ]
 let selectedDriver = DRIVERS[0]
 
-function applyCar(car) {
+function applyCar(car, swapModel) {
   vehicle.params.engineForce = car.engineForce
   vehicle.params.cruiseSpeedKmh = car.cruiseSpeedKmh
   vehicle.params.maxSpeedKmh = car.maxSpeedKmh
+  if (swapModel && car.url) {
+    vehicle.bodyModelParams.rotationY = car.rotY ?? 0
+    vehicle.setBodyModel(car.url)
+    // Full-car models bring their own wheels; only the RC buggy uses the
+    // separate raycast wheel visuals.
+    vehicle.setWheelsVisible(car.url === baseCarUrl)
+  }
 }
 
 function buildCarDriverPickers() {
@@ -606,13 +626,14 @@ function buildCarDriverPickers() {
     o.textContent = c.name
     carSel.append(o)
   })
-  const showCar = (i) => {
+  const showCar = (i, swapModel) => {
     const c = CARS[i]
-    applyCar(c)
+    applyCar(c, swapModel)
     carStats.textContent = `Top ${c.maxSpeedKmh} km/h · engine ${c.engineForce}`
   }
-  carSel.addEventListener('change', (e) => showCar(+e.target.value))
-  showCar(0)
+  // Init: tuning only — the Vehicle already loads the default (RC Buggy) model.
+  carSel.addEventListener('change', (e) => showCar(+e.target.value, true))
+  showCar(0, false)
 
   const driverSel = document.getElementById('menu-driver')
   const driverBio = document.getElementById('menu-driver-bio')

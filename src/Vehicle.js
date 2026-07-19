@@ -650,6 +650,13 @@ export class Vehicle {
     }
   }
 
+  /** Show/hide the raycast wheel visuals (hidden for full-car models that
+   *  already include their own wheels). */
+  setWheelsVisible(visible) {
+    if (!this.wheelVisualRoots) return
+    for (const root of this.wheelVisualRoots) root.visible = visible
+  }
+
   /** Recolour the car's paint (placeholder body + GLB body paint materials). */
   setBodyColor(color) {
     this._bodyColor = color
@@ -657,6 +664,82 @@ export class Vehicle {
       material.color.set(color)
       material.needsUpdate = true
     }
+  }
+
+  /**
+   * Load a GLB and install it as the car body, replacing the current body model
+   * (or the placeholder). Auto-centres, fits its length to the physics chassis,
+   * re-collects paint materials, and re-applies the current colour. Used both for
+   * the initial model and for switching cars at runtime.
+   */
+  async setBodyModel(url) {
+    let gltf
+    try {
+      gltf = await new GLTFLoader().loadAsync(url)
+    } catch (error) {
+      console.warn('Could not load car model', url, error)
+      return
+    }
+    let hasMesh = false
+    gltf.scene.traverse((c) => {
+      if (c.isMesh) {
+        hasMesh = true
+        c.castShadow = true
+        c.receiveShadow = true
+      }
+    })
+    if (!hasMesh) {
+      console.warn('car model has no meshes', url)
+      return
+    }
+    this._installBodyModel(gltf.scene)
+  }
+
+  _installBodyModel(scene) {
+    // Remove the previous body (fitted model or the placeholder group).
+    if (this._bodyModelHolder) {
+      this._bodyModelHolder.removeFromParent()
+      this._bodyModelHolder.traverse((c) => {
+        if (c.isMesh) c.geometry?.dispose()
+      })
+    } else if (this.placeholderBody) {
+      this.placeholderBody.removeFromParent()
+    }
+
+    // Centre on origin and scale so its length matches the physics chassis.
+    const box = new THREE.Box3().setFromObject(scene)
+    const size = box.getSize(new THREE.Vector3())
+    const center = box.getCenter(new THREE.Vector3())
+    scene.position.sub(center)
+    const holder = new THREE.Group()
+    holder.add(scene)
+    // Fit the model's longest horizontal dimension to the chassis length, so it
+    // works whether the model's length runs along X or Z.
+    const modelLength = Math.max(size.x, size.z) || 1
+    holder.scale.setScalar(CHASSIS_SIZE.z / modelLength)
+    this.bodyGroup.add(holder)
+    this._bodyModelHolder = holder
+    this._bodyModelFitScale = holder.scale.x
+    this.applyBodyModelParams()
+
+    // Re-collect paint materials (placeholder base + this model's paint; skip
+    // glass/lights/trim/wheels).
+    this._bodyPaintMaterials = [this._placeholderBodyMaterial]
+    holder.traverse((child) => {
+      if (!child.isMesh || !child.material) return
+      const mats = Array.isArray(child.material) ? child.material : [child.material]
+      for (const m of mats) {
+        if (!this._glbMaterials.includes(m)) this._glbMaterials.push(m)
+        const name = `${m.name} ${child.name}`.toLowerCase()
+        const isTrim =
+          m.transparent ||
+          (m.opacity ?? 1) < 1 ||
+          /glass|window|light|lamp|chrome|mirror|tyre|tire|wheel|rim|tin/.test(name)
+        if (!isTrim && !this._bodyPaintMaterials.includes(m)) this._bodyPaintMaterials.push(m)
+      }
+    })
+    this.applyReflectionParams()
+    this.setBodyColor(this._bodyColor)
   }
 
   /** Push the GUI transform tweaks to the loaded body model (no-op until it loads). */
@@ -715,40 +798,8 @@ export class Vehicle {
       return holder
     }
 
-    // --- Chassis body ---
-    try {
-      const bodyRoot = await loadScene(baseModelUrl)
-      if (bodyRoot) {
-        const size = new THREE.Box3().setFromObject(bodyRoot).getSize(new THREE.Vector3())
-        // Scale so the model's length matches the physics chassis length
-        const fitted = fitModel(bodyRoot, size.z, CHASSIS_SIZE.z)
-        this.placeholderBody.removeFromParent()
-        this.bodyGroup.add(fitted)
-        // Remember the auto-fit scale so the GUI multiplier stacks on top
-        this._bodyModelHolder = fitted
-        this._bodyModelFitScale = fitted.scale.x
-        this.applyBodyModelParams()
-
-        // Collect the body's paint materials so the car colour is adjustable.
-        // Skip glass/lights/trim: transparent materials, or ones named
-        // glass/window/light/lamp/chrome.
-        fitted.traverse((child) => {
-          if (!child.isMesh || !child.material) return
-          const mats = Array.isArray(child.material) ? child.material : [child.material]
-          for (const m of mats) {
-            const name = `${m.name} ${child.name}`.toLowerCase()
-            const isTrim = m.transparent || (m.opacity ?? 1) < 1 ||
-              /glass|window|light|lamp|chrome|mirror|tyre|tire/.test(name)
-            if (!isTrim && !this._bodyPaintMaterials.includes(m)) this._bodyPaintMaterials.push(m)
-          }
-        })
-        this.setBodyColor(this._bodyColor)
-      } else {
-        console.warn('base.glb contains no meshes — keeping placeholder body')
-      }
-    } catch (error) {
-      console.warn('Could not load base.glb — keeping placeholder body', error)
-    }
+    // --- Chassis body --- (shares the swap path used for switching cars)
+    await this.setBodyModel(baseModelUrl)
 
     // --- Wheels (same order as the physics wheels: FL, FR, BL, BR) ---
     const wheelUrls = [wheelFrontLeftUrl, wheelFrontRightUrl, wheelBackLeftUrl, wheelBackRightUrl]
