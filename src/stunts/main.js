@@ -454,6 +454,63 @@ function buildSwatches(container) {
 buildSwatches(document.getElementById('car-colors'))
 buildSwatches(document.getElementById('menu-colors'))
 
+// --- Car & driver selection --------------------------------------------------
+// A few tuning presets ("cars") that change engine/top speed live, plus flavour
+// drivers (cosmetic until AI opponents exist).
+const CARS = [
+  { name: 'Rally Buggy', engineForce: 1400, cruiseSpeedKmh: 90, maxSpeedKmh: 140 },
+  { name: 'Sprint GT', engineForce: 1750, cruiseSpeedKmh: 115, maxSpeedKmh: 180 },
+  { name: 'Off-Roader', engineForce: 1250, cruiseSpeedKmh: 78, maxSpeedKmh: 120 },
+]
+const DRIVERS = [
+  { name: 'Skid Vicious', bio: 'Fearless and fast — takes every jump flat out.' },
+  { name: 'Bernie Rubber', bio: 'Wants to be a stunt driver. Squeals the tyres.' },
+  { name: 'Herr Otto Partz', bio: 'Precise and unforgiving. Hates mistakes.' },
+  { name: 'Joe Stallin', bio: 'Old-school hard-charger. No fear, no brakes.' },
+  { name: 'Cherry Chassis', bio: 'Smooth lines, smooth moves. Style points.' },
+]
+let selectedDriver = DRIVERS[0]
+
+function applyCar(car) {
+  vehicle.params.engineForce = car.engineForce
+  vehicle.params.cruiseSpeedKmh = car.cruiseSpeedKmh
+  vehicle.params.maxSpeedKmh = car.maxSpeedKmh
+}
+
+function buildCarDriverPickers() {
+  const carSel = document.getElementById('menu-car')
+  const carStats = document.getElementById('menu-car-stats')
+  CARS.forEach((c, i) => {
+    const o = document.createElement('option')
+    o.value = String(i)
+    o.textContent = c.name
+    carSel.append(o)
+  })
+  const showCar = (i) => {
+    const c = CARS[i]
+    applyCar(c)
+    carStats.textContent = `Top ${c.maxSpeedKmh} km/h · engine ${c.engineForce}`
+  }
+  carSel.addEventListener('change', (e) => showCar(+e.target.value))
+  showCar(0)
+
+  const driverSel = document.getElementById('menu-driver')
+  const driverBio = document.getElementById('menu-driver-bio')
+  DRIVERS.forEach((d, i) => {
+    const o = document.createElement('option')
+    o.value = String(i)
+    o.textContent = d.name
+    driverSel.append(o)
+  })
+  const showDriver = (i) => {
+    selectedDriver = DRIVERS[i]
+    driverBio.textContent = selectedDriver.bio
+  }
+  driverSel.addEventListener('change', (e) => showDriver(+e.target.value))
+  showDriver(0)
+}
+buildCarDriverPickers()
+
 // --- Start menu + bird's-eye preview -----------------------------------------
 const menuEl = document.getElementById('menu')
 const openMenuBtn = document.getElementById('open-menu')
