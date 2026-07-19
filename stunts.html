@@ -124,6 +124,14 @@
       #open-menu { position: fixed; top: 12px; right: 16px; z-index: 11; padding: 7px 12px;
         font: inherit; font-size: 12px; font-weight: 700; color: #e5e7eb; cursor: pointer;
         background: rgba(15,23,42,0.82); border: 1px solid rgba(148,163,184,0.3); border-radius: 8px; }
+      #view-btn { position: fixed; top: 12px; right: 92px; z-index: 11; padding: 7px 12px;
+        font: inherit; font-size: 12px; font-weight: 700; color: #e5e7eb; cursor: pointer;
+        background: rgba(15,23,42,0.82); border: 1px solid rgba(148,163,184,0.3); border-radius: 8px; }
+      #wrong-way { position: fixed; top: 22%; left: 50%; transform: translateX(-50%); z-index: 9;
+        font-weight: 800; font-size: 26px; letter-spacing: 1px; color: #fca5a5;
+        text-shadow: 0 2px 8px rgba(0,0,0,0.85); pointer-events: none;
+        animation: wwblink 0.7s steps(2, start) infinite; }
+      @keyframes wwblink { 50% { opacity: 0.35; } }
 
       /* Results / fastest-times screen shown on finishing a lap. */
       #results { position: fixed; inset: 0; z-index: 25; display: flex; align-items: center;
@@ -173,6 +181,9 @@
     </div>
 
     <button id="open-menu" class="hidden">☰ Menu</button>
+    <button id="view-btn" class="hidden">◉ Chase</button>
+
+    <div id="wrong-way" class="hidden">⚠ WRONG WAY</div>
 
     <div id="results" class="hidden">
       <div class="rcard">

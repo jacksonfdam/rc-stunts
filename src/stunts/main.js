@@ -618,6 +618,8 @@ function openMenu() {
   speedEl.classList.add('hidden')
   timerEl.classList.add('hidden')
   oppHint.classList.add('hidden')
+  document.getElementById('view-btn').classList.add('hidden')
+  document.getElementById('wrong-way').classList.add('hidden')
   refreshMenuPreview()
 }
 
@@ -627,6 +629,7 @@ function startDriving() {
   panelEl.classList.remove('hidden')
   speedEl.classList.remove('hidden')
   timerEl.classList.remove('hidden')
+  document.getElementById('view-btn').classList.remove('hidden')
   debug.topView = false
   vehicle.respawn()
   resetTimer()
@@ -649,21 +652,33 @@ const desiredTarget = new THREE.Vector3()
 const currentTarget = new THREE.Vector3()
 currentTarget.copy(vehicle.group.position)
 
+// Hood/bumper view: a low, close chase.
+const hoodOffset = new THREE.Vector3(0, 3, -5.5)
+const hoodLook = new THREE.Vector3(0, 2, 10)
+
 function updateCamera(delta) {
   const chassis = vehicle.group
-  desiredPosition.copy(cameraOffset).applyQuaternion(chassis.quaternion).add(chassis.position)
-  desiredPosition.y = Math.max(desiredPosition.y, chassis.position.y + 3)
-  desiredTarget.copy(lookOffset).applyQuaternion(chassis.quaternion).add(chassis.position)
+  const cockpitless = cameraMode === 'hood'
+  const posOff = cockpitless ? hoodOffset : cameraOffset
+  const lookOff = cockpitless ? hoodLook : lookOffset
+  const minLift = cockpitless ? 1.2 : 3
+  desiredPosition.copy(posOff).applyQuaternion(chassis.quaternion).add(chassis.position)
+  desiredPosition.y = Math.max(desiredPosition.y, chassis.position.y + minLift)
+  desiredTarget.copy(lookOff).applyQuaternion(chassis.quaternion).add(chassis.position)
 
-  camera.position.lerp(desiredPosition, 1 - Math.exp(-6 * delta))
+  const posLerp = cockpitless ? 12 : 6
+  camera.position.lerp(desiredPosition, 1 - Math.exp(-posLerp * delta))
   currentTarget.lerp(desiredTarget, 1 - Math.exp(-10 * delta))
   camera.lookAt(currentTarget)
 }
 
-// --- Cockpit view (press C to toggle) ----------------------------------------
+// --- Camera views (press C or the View button to cycle) ----------------------
 
+const CAMERA_VIEWS = ['chase', 'hood', 'cockpit']
+const VIEW_LABELS = { chase: 'Chase', hood: 'Hood', cockpit: 'Cockpit' }
 let cameraMode = 'chase'
 const cockpitEl = document.getElementById('cockpit')
+const viewBtn = document.getElementById('view-btn')
 const eyeOffset = new THREE.Vector3(0, 1.5, 0.0) // driver's eyeline inside the car
 const cockpitLookOffset = new THREE.Vector3(0, 1.1, 10)
 const cockpitEye = new THREE.Vector3()
@@ -674,9 +689,47 @@ function setCameraMode(mode) {
   const cockpit = mode === 'cockpit'
   cockpitEl.classList.toggle('hidden', !cockpit)
   vehicle.group.visible = !cockpit // don't render the car body from inside it
-  document.getElementById('speed').style.display = cockpit ? 'none' : '' // dash gauge instead
   camera.fov = cockpit ? 74 : 60
   camera.updateProjectionMatrix()
+  if (viewBtn) viewBtn.textContent = `◉ ${VIEW_LABELS[mode]}`
+}
+
+function cycleCameraMode() {
+  const i = CAMERA_VIEWS.indexOf(cameraMode)
+  setCameraMode(CAMERA_VIEWS[(i + 1) % CAMERA_VIEWS.length])
+}
+if (viewBtn) viewBtn.addEventListener('click', cycleCameraMode)
+
+// --- Wrong-way detection -----------------------------------------------------
+// Compare the car's heading with the route's local forward direction; warn when
+// driving against the track.
+const wrongWayEl = document.getElementById('wrong-way')
+const _wwFwd = new THREE.Vector3()
+
+function updateWrongWay() {
+  if (!track || !track.route || track.route.length < 3 || resultsOpen ||
+      !menuEl.classList.contains('hidden')) {
+    wrongWayEl.classList.add('hidden')
+    return
+  }
+  const route = track.route
+  const p = vehicle.group.position
+  let best = 0
+  let bestD = Infinity
+  for (let i = 0; i < route.length; i++) {
+    const d = route[i].distanceToSquared(p)
+    if (d < bestD) {
+      bestD = d
+      best = i
+    }
+  }
+  _wwFwd.copy(route[(best + 1) % route.length]).sub(route[best])
+  const v = vehicle.chassisBody.velocity
+  const speed = Math.hypot(v.x, v.z)
+  const dot = v.x * _wwFwd.x + v.z * _wwFwd.z
+  const onRoute = bestD < (TILE * 1.5) * (TILE * 1.5)
+  const wrong = onRoute && speed > 3 && dot < 0
+  wrongWayEl.classList.toggle('hidden', !wrong)
 }
 
 function updateCockpit(delta) {
@@ -751,7 +804,7 @@ function clearCrack() {
 }
 
 window.addEventListener('keydown', (event) => {
-  if (event.code === 'KeyC') setCameraMode(cameraMode === 'chase' ? 'cockpit' : 'chase')
+  if (event.code === 'KeyC') cycleCameraMode()
   if (event.code === 'KeyR') clearCrack()
 })
 
@@ -807,6 +860,7 @@ function tick() {
   const roundedSpeed = Math.round(vehicle.speedKmh)
   speedValue.textContent = roundedSpeed
   cockpitSpeed.textContent = roundedSpeed
+  updateWrongWay()
   const driving =
     vehicle.input.forward || vehicle.input.backward || Math.abs(vehicle.input.throttleAxis) > 0.05
   updateTimer(delta, driving, vehicle.group.position)
