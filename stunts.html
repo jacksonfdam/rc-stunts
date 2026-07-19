@@ -120,6 +120,29 @@
       #open-menu { position: fixed; top: 12px; right: 16px; z-index: 11; padding: 7px 12px;
         font: inherit; font-size: 12px; font-weight: 700; color: #e5e7eb; cursor: pointer;
         background: rgba(15,23,42,0.82); border: 1px solid rgba(148,163,184,0.3); border-radius: 8px; }
+
+      /* Results / fastest-times screen shown on finishing a lap. */
+      #results { position: fixed; inset: 0; z-index: 25; display: flex; align-items: center;
+        justify-content: center; background: rgba(5,7,12,0.72); backdrop-filter: blur(4px); }
+      #results.hidden { display: none; }
+      #results .rcard { width: 540px; max-width: 92vw; background: #cbd0d8; color: #1a1f2b;
+        border: 3px solid #05070c; border-radius: 6px; overflow: hidden;
+        font-family: 'Courier New', monospace; }
+      #results h2 { background: #1a1f2b; color: #fde047; padding: 10px 16px; font-size: 16px;
+        letter-spacing: 1px; }
+      #results ol { list-style: none; padding: 10px 16px; margin: 0; font-size: 14px; }
+      #results ol li { display: flex; justify-content: space-between; padding: 3px 0;
+        border-bottom: 1px dashed rgba(0,0,0,0.15); }
+      #results ol li.you { color: #b91c1c; font-weight: 700; }
+      #results ol li .rank { width: 24px; }
+      #results ol li .who { flex: 1; }
+      #results .stats { background: #b7bcc6; padding: 12px 16px; display: grid;
+        grid-template-columns: 1fr 1fr; gap: 4px 20px; font-size: 15px; font-weight: 700; }
+      #results .stats b { color: #05070c; }
+      #results .ractions { display: flex; padding: 12px 16px; gap: 10px; justify-content: center; }
+      #results button { font: inherit; font-weight: 700; font-size: 15px; padding: 10px 22px;
+        background: #e2e5ea; border: 2px solid #05070c; border-radius: 5px; cursor: pointer; }
+      #results button:hover { background: #fff; }
     </style>
   </head>
   <body>
@@ -140,6 +163,22 @@
     </div>
 
     <button id="open-menu" class="hidden">☰ Menu</button>
+
+    <div id="results" class="hidden">
+      <div class="rcard">
+        <h2>Fastest times · <span id="results-track">—</span></h2>
+        <ol id="results-list"></ol>
+        <div class="stats">
+          <div>Lap time: <b id="rs-time">—</b></div>
+          <div>Top speed: <b id="rs-top">0</b> km/h</div>
+          <div>Avg speed: <b id="rs-avg">0</b> km/h</div>
+          <div>Jumps: <b id="rs-jumps">0</b></div>
+        </div>
+        <div class="ractions">
+          <button id="results-continue">Continue ▸</button>
+        </div>
+      </div>
+    </div>
 
     <div id="panel">
       <h1>Stunts · Web Port</h1>

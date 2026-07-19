@@ -86,6 +86,20 @@ let lapStart = 0
 let bestLap = Infinity
 let lapCount = 1
 let wasOnStart = true // car spawns on the start tile
+// Per-lap stats for the results screen.
+let lapTop = 0
+let lapSpeedSum = 0
+let lapSpeedN = 0
+let lapJumps = 0
+let wasGrounded = true
+
+function resetLapStats() {
+  lapTop = 0
+  lapSpeedSum = 0
+  lapSpeedN = 0
+  lapJumps = 0
+  wasGrounded = true
+}
 
 function resetTimer() {
   runTime = 0
@@ -94,10 +108,17 @@ function resetTimer() {
   bestLap = Infinity
   lapCount = 1
   wasOnStart = true
+  resetLapStats()
   timerEl.classList.add('idle')
   timerValue.textContent = '0:00.000'
   lapCountEl.textContent = '1'
   bestLapEl.textContent = '—'
+}
+
+function isGrounded() {
+  const wheels = vehicle.raycastVehicle.wheelInfos
+  for (const w of wheels) if (w.isInContact) return true
+  return false
 }
 
 function formatTime(seconds) {
@@ -108,12 +129,22 @@ function formatTime(seconds) {
 }
 
 function updateTimer(delta, driving, carPos) {
+  if (resultsOpen) return // frozen while the results screen is up
   if (!timing && driving) {
     timing = true
     timerEl.classList.remove('idle')
   }
   if (!timing) return
   runTime += delta
+
+  // Accumulate per-lap stats.
+  const spd = vehicle.speedKmh
+  lapTop = Math.max(lapTop, spd)
+  lapSpeedSum += spd
+  lapSpeedN++
+  const grounded = isGrounded()
+  if (wasGrounded && !grounded && spd > 20) lapJumps++ // took off at speed
+  wasGrounded = grounded
 
   if (track && track.hasStart) {
     const dx = carPos.x - track.start.x
@@ -125,9 +156,11 @@ function updateTimer(delta, driving, carPos) {
         bestLap = lapElapsed
         bestLapEl.textContent = formatTime(bestLap)
       }
-      lapStart = runTime
       lapCount++
       lapCountEl.textContent = String(lapCount)
+      finishLap(lapElapsed)
+      lapStart = runTime
+      resetLapStats()
     }
     wasOnStart = onStart
     timerValue.textContent = formatTime(runTime - lapStart)
@@ -139,6 +172,60 @@ function updateTimer(delta, driving, carPos) {
 // R respawns the car (handled inside Vehicle); mirror it here to reset the clock.
 window.addEventListener('keydown', (event) => {
   if (event.code === 'KeyR') resetTimer()
+})
+
+// --- Results / fastest times -------------------------------------------------
+const resultsEl = document.getElementById('results')
+const resultsTrack = document.getElementById('results-track')
+const resultsList = document.getElementById('results-list')
+const rsTime = document.getElementById('rs-time')
+const rsTop = document.getElementById('rs-top')
+const rsAvg = document.getElementById('rs-avg')
+const rsJumps = document.getElementById('rs-jumps')
+let resultsOpen = false
+
+function finishLap(lapSeconds) {
+  const code = document.getElementById('track-name').textContent
+  const key = `stunts-times:${code}`
+  let times = []
+  try {
+    times = JSON.parse(localStorage.getItem(key)) || []
+  } catch {
+    times = []
+  }
+  times.push({ t: lapSeconds, c: carColor })
+  times.sort((a, b) => a.t - b.t)
+  times = times.slice(0, 8)
+  try {
+    localStorage.setItem(key, JSON.stringify(times))
+  } catch {
+    /* storage may be unavailable; results still show */
+  }
+
+  resultsTrack.textContent = code
+  resultsList.innerHTML = ''
+  times.forEach((e, i) => {
+    const li = document.createElement('li')
+    const mine = Math.abs(e.t - lapSeconds) < 0.0005
+    if (mine) li.className = 'you'
+    li.innerHTML =
+      `<span class="rank">${i + 1}.</span>` +
+      `<span class="who">${mine ? 'You' : '···'}</span>` +
+      `<span>${formatTime(e.t)}</span>`
+    resultsList.append(li)
+  })
+  rsTime.textContent = formatTime(lapSeconds)
+  rsTop.textContent = Math.round(lapTop)
+  rsAvg.textContent = Math.round(lapSpeedSum / Math.max(1, lapSpeedN))
+  rsJumps.textContent = String(lapJumps)
+
+  resultsOpen = true
+  resultsEl.classList.remove('hidden')
+}
+
+document.getElementById('results-continue').addEventListener('click', () => {
+  resultsEl.classList.add('hidden')
+  resultsOpen = false
 })
 
 // --- Loop assist -------------------------------------------------------------
