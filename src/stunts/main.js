@@ -279,7 +279,7 @@ function updateTopView() {
   camera.position.set(debug.topX, debug.topY, debug.topZ + 0.01)
   camera.lookAt(debug.topX, 0, debug.topZ)
 }
-window.__stunts = { scene, camera, renderer, vehicle, debug, get track() { return track } }
+window.__stunts = { scene, camera, renderer, vehicle, debug, loadTrack, get track() { return track } }
 
 // --- Loop --------------------------------------------------------------------
 

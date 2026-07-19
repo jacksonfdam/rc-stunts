@@ -961,13 +961,18 @@ export class Vehicle {
           this._tmpVec.cross(UP, this._tmpVec2)
           this._tmpVec2.scale(p.mass * 55 * speedFade, this._tmpVec2)
           body.torque.vadd(this._tmpVec2, body.torque)
-        }
 
-        body.quaternion.conjugate(this._tmpQuat)
-        this._tmpQuat.vmult(body.angularVelocity, this._tmpVec)
-        this._tmpVec.x *= 0.88
-        this._tmpVec.z *= 0.88
-        body.quaternion.vmult(this._tmpVec, body.angularVelocity)
+          // Bleed off pitch/roll spin so a slow tumble settles instead of
+          // flipping. Gated by the same speed fade: at loop/stunt speeds the
+          // car must be free to rotate all the way through a vertical loop or
+          // corkscrew, so this damping only applies when moving slowly.
+          body.quaternion.conjugate(this._tmpQuat)
+          this._tmpQuat.vmult(body.angularVelocity, this._tmpVec)
+          const damp = 1 - 0.12 * speedFade
+          this._tmpVec.x *= damp
+          this._tmpVec.z *= damp
+          body.quaternion.vmult(this._tmpVec, body.angularVelocity)
+        }
       }
     }
   }

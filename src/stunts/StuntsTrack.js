@@ -118,13 +118,11 @@ export class StuntsTrack {
         this._addElevated(el, center)
         break
       case CATEGORY.LOOP:
-        this._addFlat(el, center)
-        this._addLoopVisual(el, center)
+        this._addLoop(el, center)
         break
       case CATEGORY.PIPE:
       case CATEGORY.TUNNEL:
-        this._addFlat(el, center)
-        this._addTubeVisual(el, center)
+        this._addPipe(el, center)
         break
       case CATEGORY.SCENERY:
         this._addScenery(el, center)
@@ -234,27 +232,99 @@ export class StuntsTrack {
     this._addBoxCollider(mesh.position, new CANNON.Vec3(w / 2, h / 2, w / 2))
   }
 
-  _addLoopVisual(el, center) {
-    // A vertical torus standing above the drivable base — a recognisable loop
-    // show-piece. Not yet a driveable collider (needs tuned trimesh physics).
-    const radius = TILE * 0.7
-    const geometry = new THREE.TorusGeometry(radius, TILE * 0.12, 12, 32)
-    const mesh = new THREE.Mesh(geometry, this._material(el.color, { metalness: 0.3, roughness: 0.5 }))
-    mesh.position.set(center.x, GROUND_Y + radius, center.z)
-    mesh.rotation.y = this._yaw(el.orient) + Math.PI / 2 // face the loop across travel
+  /**
+   * Builds a drivable curved surface (visual mesh + CANNON.Trimesh collider)
+   * from `rings`: an array of cross-sections, each an array of local [x,y,z]
+   * points (same length). Consecutive rings are stitched into quads. Points are
+   * yawed about Y and translated to `center`, and the world coordinates are
+   * baked into both the geometry and the trimesh so the collider is exact.
+   */
+  _addSweptSurface(rings, center, yaw, color) {
+    const cos = Math.cos(yaw)
+    const sin = Math.sin(yaw)
+    const K = rings.length
+    const M = rings[0].length
+    const positions = new Float32Array(K * M * 3)
+    let o = 0
+    for (let r = 0; r < K; r++) {
+      for (let m = 0; m < M; m++) {
+        const [x, y, z] = rings[r][m]
+        positions[o++] = x * cos + z * sin + center.x
+        positions[o++] = y + center.y
+        positions[o++] = -x * sin + z * cos + center.z
+      }
+    }
+    const indices = []
+    for (let r = 0; r < K - 1; r++) {
+      for (let m = 0; m < M - 1; m++) {
+        const a = r * M + m
+        const b = r * M + m + 1
+        const c = (r + 1) * M + m + 1
+        const d = (r + 1) * M + m
+        indices.push(a, b, d, b, c, d)
+      }
+    }
+
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    geometry.setIndex(indices)
+    geometry.computeVertexNormals()
+    const material = new THREE.MeshStandardMaterial({
+      color,
+      roughness: 0.55,
+      metalness: 0.15,
+      side: THREE.DoubleSide,
+    })
+    const mesh = new THREE.Mesh(geometry, material)
     mesh.castShadow = true
+    mesh.receiveShadow = true
     this.group.add(mesh)
+
+    const trimesh = new CANNON.Trimesh(Array.from(positions), indices)
+    const body = new CANNON.Body({ mass: 0, material: this.physicsWorld.defaultMaterial })
+    body.addShape(trimesh)
+    body.updateAABB()
+    this.physicsWorld.addBody(body)
+    this.colliderBodies.push(body)
   }
 
-  _addTubeVisual(el, center) {
-    // A half-pipe arch over the drivable base (pipe/tunnel show-piece).
-    const radius = TILE * 0.5
-    const geometry = new THREE.TorusGeometry(radius, TILE * 0.08, 10, 24, Math.PI)
-    const mesh = new THREE.Mesh(geometry, this._material(el.color, { metalness: 0.2, roughness: 0.6 }))
-    mesh.position.set(center.x, GROUND_Y, center.z)
-    mesh.rotation.y = this._yaw(el.orient)
-    mesh.castShadow = true
-    this.group.add(mesh)
+  _addLoop(el, center) {
+    // A full vertical-circle road ribbon in the travel plane: enters at ground
+    // going +travel, curves up and over. The car needs speed to keep contact at
+    // the top (see the speed-gated upright assist in Vehicle.js).
+    const RL = TILE * 0.85
+    const halfW = TILE * 0.36
+    const SEGMENTS = 40
+    const rings = []
+    for (let i = 0; i <= SEGMENTS; i++) {
+      const a = (i / SEGMENTS) * Math.PI * 2
+      const y = RL - RL * Math.cos(a)
+      const z = RL * Math.sin(a)
+      rings.push([
+        [-halfW, y, z],
+        [halfW, y, z],
+      ])
+    }
+    this._addSweptSurface(rings, center, this._yaw(el.orient), el.color)
+  }
+
+  _addPipe(el, center) {
+    // A concave half-pipe trough along travel: the floor sits at ground level
+    // and curves up into walls, so you drive through it and can ride the sides.
+    const R = TILE * 0.5
+    const half = (TILE * INSET) / 2
+    const PHI = 2.15 // half-arc of the trough (radians up each wall)
+    const M = 11
+    const cross = []
+    for (let j = 0; j < M; j++) {
+      const phi = -PHI + 2 * PHI * (j / (M - 1))
+      cross.push([R * Math.sin(phi), R - R * Math.cos(phi)])
+    }
+    const rings = [
+      cross.map(([x, y]) => [x, y, -half]),
+      cross.map(([x, y]) => [x, y, half]),
+    ]
+    this._addSweptSurface(rings, center, this._yaw(el.orient), el.color)
   }
 
   _addScenery(el, center) {

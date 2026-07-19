@@ -137,6 +137,9 @@ const QUADS = {
   0x24: [1, 3, 2, 4], // elevated ramp / incline
   0x38: [1, 3, 2, 4], // bridge ramp
   0x5f: [1, 3, 2, 4], // solid ramp
+  0x40: [2, 1], // loop (S→N, E→W)
+  0x42: [2, 1], // tunnel
+  0x44: [2, 1], // pipe
 }
 
 // Which scenery prop each 0x97–0x9A id is (for prop rendering).
