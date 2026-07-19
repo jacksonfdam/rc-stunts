@@ -141,26 +141,26 @@ function buildOpponentCar() {
   return g
 }
 
+const OPP_START_LEAD = TILE * 1.6 // start ahead of the player so they don't overlap
 const opponent = { group: buildOpponentCar(), idx: 0, t: 0, speed: 21, active: false }
 scene.add(opponent.group)
 opponent.group.visible = false
 const _oppDir = new THREE.Vector3()
 
-function resetOpponent() {
-  opponent.idx = 0
-  opponent.t = 0
-  opponent.active = !!(track && track.route && track.route.length > 2)
-  opponent.group.visible = opponent.active
-  if (opponent.active) opponent.group.position.copy(track.route[0])
-}
+// Kinematic collision body — a box that follows the ghost and shoves the
+// player's (dynamic) car. Kinematic ⇒ it never collides with the static track.
+const opponentBody = new CANNON.Body({
+  mass: 0,
+  type: CANNON.Body.KINEMATIC,
+  material: physicsWorld.defaultMaterial,
+})
+opponentBody.addShape(new CANNON.Box(new CANNON.Vec3(1.6, 1.0, 3.0)))
+physicsWorld.addBody(opponentBody)
+const _oppUp = new CANNON.Vec3(0, 1, 0)
 
-function updateOpponent(delta) {
-  if (!opponent.active) return
-  // Hold at the start line until the race begins (menu closed).
-  if (!menuEl.classList.contains('hidden')) return
+function advanceOpponent(dist) {
   const route = track.route
-  let remaining = opponent.speed * delta
-  // Walk forward along the route by `remaining` world units.
+  let remaining = dist
   for (let guard = 0; guard < route.length + 2 && remaining > 0; guard++) {
     const a = route[opponent.idx]
     const b = route[(opponent.idx + 1) % route.length]
@@ -175,11 +175,39 @@ function updateOpponent(delta) {
       opponent.t = 0
     }
   }
+}
+
+function placeOpponent() {
+  const route = track.route
   const a = route[opponent.idx]
   const b = route[(opponent.idx + 1) % route.length]
   opponent.group.position.lerpVectors(a, b, opponent.t)
   _oppDir.copy(b).sub(a)
-  if (_oppDir.lengthSq() > 0.0001) opponent.group.rotation.y = Math.atan2(_oppDir.x, _oppDir.z)
+  const yaw = _oppDir.lengthSq() > 0.0001 ? Math.atan2(_oppDir.x, _oppDir.z) : 0
+  opponent.group.rotation.y = yaw
+  const p = opponent.group.position
+  opponentBody.position.set(p.x, p.y + 1, p.z)
+  opponentBody.quaternion.setFromAxisAngle(_oppUp, yaw)
+}
+
+function resetOpponent() {
+  opponent.idx = 0
+  opponent.t = 0
+  opponent.active = !!(track && track.route && track.route.length > 2)
+  opponent.group.visible = opponent.active
+  opponentBody.collisionResponse = opponent.active
+  if (opponent.active) {
+    advanceOpponent(OPP_START_LEAD) // line up ahead of the player, not on top
+    placeOpponent()
+  }
+}
+
+function updateOpponent(delta) {
+  if (!opponent.active) return
+  // Hold at the start line until the race begins (menu closed).
+  if (!menuEl.classList.contains('hidden')) return
+  advanceOpponent(opponent.speed * delta)
+  placeOpponent()
 
   const near = opponent.group.position.distanceTo(vehicle.group.position) < TILE * 1.6
   oppHint.classList.toggle('hidden', !near)
