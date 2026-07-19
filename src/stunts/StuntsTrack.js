@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import * as CANNON from 'cannon-es'
 
-import { GRID } from './TrackFile.js'
+import { GRID, FILLERS } from './TrackFile.js'
 import { describeElement, CATEGORY } from './trackElements.js'
 
 /**
@@ -23,7 +23,9 @@ import { describeElement, CATEGORY } from './trackElements.js'
 // gameplay-tuned size so the existing ~4 m car feels right on the road.
 export const TILE = 24
 const GROUND_Y = 0
-const ROAD_H = 0.5 // flat slab thickness
+const ROAD_H = 0.15 // flat slab thickness — kept low so road sits nearly flush
+// with the grass; a taller slab shows dark side-walls where a curved corner
+// (a thin plane) meets a straight (a box), which reads as a broken seam.
 const ELEV_H = 6 // height of raised/elevated pieces
 const RAMP_RISE = ELEV_H // vertical rise across one ramp tile
 // Road pieces span the full tile so adjacent cells butt flush into one
@@ -95,15 +97,76 @@ export class StuntsTrack {
   }
 
   _buildTiles() {
+    const key = (x, y) => y * GRID + x
+    // Pre-pass: find 2×2 large corners, resolve their block, and mark the three
+    // filler cells so they aren't drawn as separate flat tiles (they belong to
+    // the one wide curve).
+    const skip = new Set()
+    const largeCorners = []
+    const largeAnchors = new Set()
+    for (let y = 0; y < GRID; y++) {
+      for (let x = 0; x < GRID; x++) {
+        const el = describeElement(this.trackFile.trackAt(x, y))
+        if (el.category !== CATEGORY.CORNER || el.size !== 2) continue
+        const block = this._largeCornerBlock(x, y)
+        if (!block) continue // no clean 2×2 → fall back to a 1-tile curve
+        largeCorners.push({ el, bx: block.bx, by: block.by })
+        largeAnchors.add(key(x, y))
+        for (const [cx, cy] of block.fillers) skip.add(key(cx, cy))
+      }
+    }
+
     const center = new THREE.Vector3()
     for (let y = 0; y < GRID; y++) {
       for (let x = 0; x < GRID; x++) {
+        if (skip.has(key(x, y)) || largeAnchors.has(key(x, y))) continue
         const el = describeElement(this.trackFile.trackAt(x, y))
         if (el.empty) continue
         this.tileToWorld(x, y, center)
         this._buildPiece(el, center)
       }
     }
+
+    // Draw each large corner as one wide curve spanning its 2×2 block.
+    for (const { el, bx, by } of largeCorners) {
+      const c0 = this.tileToWorld(bx, by, new THREE.Vector3())
+      this._addCornerArc(el.quadrant, el.color, c0.x + TILE / 2, c0.z + TILE / 2, TILE)
+    }
+  }
+
+  /**
+   * Resolve the 2×2 block for a large-corner anchor at (ax, ay): the block whose
+   * other three cells are all fillers. Returns {bx, by, fillers} (bx,by = the
+   * block's min corner) or null if no clean block exists.
+   */
+  _largeCornerBlock(ax, ay) {
+    const candidates = [
+      [ax, ay],
+      [ax - 1, ay],
+      [ax, ay - 1],
+      [ax - 1, ay - 1],
+    ]
+    for (const [bx, by] of candidates) {
+      if (bx < 0 || by < 0 || bx + 1 >= GRID || by + 1 >= GRID) continue
+      const cells = [
+        [bx, by],
+        [bx + 1, by],
+        [bx, by + 1],
+        [bx + 1, by + 1],
+      ]
+      const fillers = []
+      let ok = true
+      for (const [cx, cy] of cells) {
+        if (cx === ax && cy === ay) continue
+        if (FILLERS.has(this.trackFile.trackAt(cx, cy))) fillers.push([cx, cy])
+        else {
+          ok = false
+          break
+        }
+      }
+      if (ok && fillers.length === 3) return { bx, by, fillers }
+    }
+    return null
   }
 
   _buildPiece(el, center) {
@@ -155,36 +218,39 @@ export class StuntsTrack {
   }
 
   _addCorner(el, center) {
-    // Full-width curved road: a quarter disc (radius = one tile) whose arc
-    // centre sits at the tile vertex the turn wraps around, so the road covers
-    // both connected edges and leaves grass on the outer corner. Quadrant names
-    // which vertex (1=NE, 2=NW, 3=SW, 4=SE) and thus which two edges connect.
-    // Quadrant→vertex mapping calibrated against the community corpus: the arc
-    // centre sits at the vertex OPPOSITE the quadrant name (a 180° convention
-    // offset in the grid's row order). This scores 98% edge-connectivity across
-    // 359 corners in 84 tracks; the naive same-vertex mapping scores 5%.
-    const h = TILE / 2
+    this._addCornerArc(el.quadrant, el.color, center.x, center.z, TILE / 2)
+  }
+
+  /**
+   * Full-width curved road: a quarter disc (radius = 2·half) whose arc centre
+   * sits at the vertex the turn wraps around, so the road covers both connected
+   * edges and leaves grass on the outer corner. `half` is the piece's half-size
+   * (TILE/2 for a 1×1 sharp corner, TILE for a 2×2 large corner). The quadrant→
+   * vertex mapping is calibrated against the community corpus (98% edge
+   * connectivity over 359 sharp corners; the naive same-vertex mapping is 5%).
+   */
+  _addCornerArc(quadrant, color, cx, cz, half) {
     const HALF_PI = Math.PI / 2
     const MAP = {
-      1: { ox: -h, oz: -h, theta: 3 * HALF_PI }, // Q1 → SW vertex (connects S & W)
-      2: { ox: +h, oz: -h, theta: Math.PI }, //     Q2 → SE vertex (connects S & E)
-      3: { ox: +h, oz: +h, theta: HALF_PI }, //     Q3 → NE vertex (connects N & E)
-      4: { ox: -h, oz: +h, theta: 0 }, //           Q4 → NW vertex (connects N & W)
+      1: { ox: -half, oz: -half, theta: 3 * HALF_PI }, // Q1 → SW vertex (S & W)
+      2: { ox: +half, oz: -half, theta: Math.PI }, //     Q2 → SE vertex (S & E)
+      3: { ox: +half, oz: +half, theta: HALF_PI }, //     Q3 → NE vertex (N & E)
+      4: { ox: -half, oz: +half, theta: 0 }, //           Q4 → NW vertex (N & W)
     }
-    const m = MAP[el.quadrant] ?? MAP[2]
+    const m = MAP[quadrant] ?? MAP[2]
 
-    const geometry = new THREE.RingGeometry(0, TILE, 24, 1, m.theta, HALF_PI)
+    const geometry = new THREE.RingGeometry(0, 2 * half, 40, 1, m.theta, HALF_PI)
     geometry.rotateX(-HALF_PI) // XY ring → flat XZ road surface facing up
-    const mesh = new THREE.Mesh(geometry, this._material(el.color))
-    mesh.position.set(center.x + m.ox, GROUND_Y + ROAD_H, center.z + m.oz)
+    const mesh = new THREE.Mesh(geometry, this._material(color))
+    mesh.position.set(cx + m.ox, GROUND_Y + ROAD_H, cz + m.oz)
     mesh.receiveShadow = true
     this.group.add(mesh)
 
-    // Physics stays a full-tile square (forgiving to drive); the visual shows
-    // the curve. A thin road-height box so the car rides flush with straights.
+    // Physics stays a full square (forgiving to drive); the visual shows the
+    // curve. A thin road-height box so the car rides flush with straights.
     this._addBoxCollider(
-      new THREE.Vector3(center.x, GROUND_Y + ROAD_H / 2, center.z),
-      new CANNON.Vec3(TILE / 2, ROAD_H / 2, TILE / 2)
+      new THREE.Vector3(cx, GROUND_Y + ROAD_H / 2, cz),
+      new CANNON.Vec3(half, ROAD_H / 2, half)
     )
   }
 

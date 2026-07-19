@@ -77,6 +77,12 @@
         box-shadow: inset 0 0 0 1.2vh #0a0c11; }
       #cockpit .wheel::after { content: ''; position: absolute; inset: 46% 8% auto 8%;
         height: 8%; background: #14171f; border-radius: 3px; }
+      #cockpit .gauge { position: absolute; bottom: 4vh; left: 24%; transform: translateX(-50%);
+        text-align: center; color: #fde047; font-variant-numeric: tabular-nums;
+        text-shadow: 0 2px 6px rgba(0,0,0,0.8); }
+      #cockpit .gauge b { font-size: 42px; font-weight: 800; }
+      #cockpit .gauge small { display: block; font-size: 12px; font-weight: 700;
+        letter-spacing: 2px; color: #94a3b8; }
 
       /* Cracked-windshield overlay, shown on a hard crash. */
       #crack { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 9;
@@ -115,6 +121,7 @@
       <div class="pillar right"></div>
       <div class="dash"></div>
       <div class="wheel"></div>
+      <div class="gauge"><b id="cockpit-speed">0</b><small>km/h</small></div>
     </div>
 
     <svg id="crack"></svg>

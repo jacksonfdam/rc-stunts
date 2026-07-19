@@ -393,6 +393,7 @@ function setCameraMode(mode) {
   const cockpit = mode === 'cockpit'
   cockpitEl.classList.toggle('hidden', !cockpit)
   vehicle.group.visible = !cockpit // don't render the car body from inside it
+  document.getElementById('speed').style.display = cockpit ? 'none' : '' // dash gauge instead
   camera.fov = cockpit ? 74 : 60
   camera.updateProjectionMatrix()
 }
@@ -494,6 +495,7 @@ window.__stunts = {
 const FIXED_STEP = 1 / 60
 let lastTime = performance.now()
 const speedValue = document.getElementById('speed-value')
+const cockpitSpeed = document.getElementById('cockpit-speed')
 
 function tick() {
   const now = performance.now()
@@ -520,7 +522,9 @@ function tick() {
   sun.target.position.copy(vehicle.group.position)
   sun.target.updateMatrixWorld()
 
-  speedValue.textContent = Math.round(vehicle.speedKmh)
+  const roundedSpeed = Math.round(vehicle.speedKmh)
+  speedValue.textContent = roundedSpeed
+  cockpitSpeed.textContent = roundedSpeed
   const driving =
     vehicle.input.forward || vehicle.input.backward || Math.abs(vehicle.input.throttleAxis) > 0.05
   updateTimer(delta, driving, vehicle.group.position)
