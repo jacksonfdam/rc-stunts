@@ -89,10 +89,57 @@
         pointer-events: none; opacity: 0; transition: opacity 0.12s ease-out; }
       #crack.show { opacity: 0.92; }
       #crack line { stroke: #f8fafc; stroke-linecap: round; }
+
+      /* Start menu (over a bird's-eye preview of the selected track). */
+      #menu { position: fixed; inset: 0; z-index: 20; display: flex; align-items: stretch; }
+      #menu.hidden { display: none; }
+      #menu .card { width: 340px; max-width: 88vw; padding: 26px 24px;
+        background: linear-gradient(160deg, rgba(15,23,42,0.94), rgba(15,23,42,0.82));
+        backdrop-filter: blur(8px); border-right: 1px solid rgba(148,163,184,0.25);
+        display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+      #menu .preview-hint { position: absolute; bottom: 16px; right: 20px; font-size: 12px;
+        color: rgba(226,232,240,0.7); text-shadow: 0 2px 6px rgba(0,0,0,0.8); }
+      #menu h1 { font-size: 30px; font-weight: 800; letter-spacing: 1px; line-height: 1; }
+      #menu h1 span { display: block; font-size: 13px; font-weight: 700; letter-spacing: 3px;
+        text-transform: uppercase; color: #fbbf24; margin-top: 6px; }
+      #menu label { font-size: 11px; font-weight: 700; letter-spacing: 1px;
+        text-transform: uppercase; color: #94a3b8; margin-top: 6px; }
+      #menu select { padding: 8px 10px; background: #0f172a; color: #e5e7eb; font: inherit;
+        font-size: 13px; border: 1px solid rgba(148,163,184,0.35); border-radius: 8px; cursor: pointer; }
+      #menu .meta { font-size: 13px; color: #cbd5e1; }
+      #menu .meta b { color: #fff; }
+      #menu #menu-colors { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+      #menu #menu-colors .swatch { width: 24px; height: 24px; border-radius: 6px; cursor: pointer;
+        border: 2px solid rgba(255,255,255,0.25); }
+      #menu #menu-colors .swatch.active { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.35); }
+      #menu #menu-drive { margin-top: 14px; padding: 14px; font: inherit; font-size: 18px; font-weight: 800;
+        color: #052e16; background: linear-gradient(#4ade80, #22c55e); border: none; border-radius: 10px;
+        cursor: pointer; letter-spacing: 0.5px; }
+      #menu #menu-drive:hover { filter: brightness(1.08); }
+      #menu .foot { margin-top: auto; font-size: 11px; color: #64748b; line-height: 1.5; }
+      #open-menu { position: fixed; top: 12px; right: 16px; z-index: 11; padding: 7px 12px;
+        font: inherit; font-size: 12px; font-weight: 700; color: #e5e7eb; cursor: pointer;
+        background: rgba(15,23,42,0.82); border: 1px solid rgba(148,163,184,0.3); border-radius: 8px; }
     </style>
   </head>
   <body>
     <div id="app"></div>
+
+    <div id="menu">
+      <div class="card">
+        <h1>STUNTS<span>Web Port</span></h1>
+        <label for="menu-track">Track</label>
+        <select id="menu-track"></select>
+        <div class="meta">Horizon: <b id="menu-horizon">—</b> · <b id="menu-tiles">0</b> tiles</div>
+        <label>Car color</label>
+        <div id="menu-colors"></div>
+        <button id="menu-drive">Let's Drive ▸</button>
+        <div class="foot">WASD / arrows to drive · Shift boost · Space jump · R respawn · C cockpit</div>
+      </div>
+      <div class="preview-hint">bird's-eye preview</div>
+    </div>
+
+    <button id="open-menu" class="hidden">☰ Menu</button>
 
     <div id="panel">
       <h1>Stunts · Web Port</h1>

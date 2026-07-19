@@ -300,8 +300,9 @@ async function buildTrackPicker() {
   }
 }
 
-trackSelect.addEventListener('change', async (event) => {
-  const url = event.target.value
+// Load the cached (or freshly fetched) track for a bundled-track url. Shared by
+// the in-game panel select and the start-menu select.
+async function loadTrackByUrl(url) {
   if (!url) return
   let cached = trackCache.get(url)
   if (!cached) {
@@ -309,9 +310,18 @@ trackSelect.addEventListener('change', async (event) => {
     cached = { tf: TrackFile.parse(buffer), code: url }
   }
   loadTrack(cached.tf, cached.code)
+}
+
+trackSelect.addEventListener('change', (event) => {
+  loadTrackByUrl(event.target.value)
+  menuTrack.value = event.target.value
+  refreshMenuPreview()
 })
 
-buildTrackPicker()
+buildTrackPicker().then(() => {
+  // Mirror the parsed/labelled options into the start-menu picker.
+  menuTrack.innerHTML = trackSelect.innerHTML
+})
 
 // Load a real .TRK from disk.
 document.getElementById('trk-file').addEventListener('change', async (event) => {
@@ -327,37 +337,88 @@ const CAR_COLORS = [
   0xef4444, 0x2563eb, 0x16a34a, 0xf59e0b, 0xdb2777,
   0x7c3aed, 0x0891b2, 0xe11d48, 0x111827, 0xf8fafc,
 ]
-const carColorsEl = document.getElementById('car-colors')
-let activeSwatch = null
+let carColor = 0xef4444
+const swatchEls = [] // all swatches across both palettes, for active-state sync
 
-for (const color of CAR_COLORS) {
-  const s = document.createElement('div')
-  s.className = 'swatch'
-  s.style.background = `#${color.toString(16).padStart(6, '0')}`
-  s.addEventListener('click', () => {
-    vehicle.setBodyColor(color)
-    if (activeSwatch) activeSwatch.classList.remove('active')
-    activeSwatch = s
-    s.classList.add('active')
-    customColor.value = `#${color.toString(16).padStart(6, '0')}`
-  })
-  carColorsEl.append(s)
-  if (color === 0xef4444) {
-    s.classList.add('active')
-    activeSwatch = s
-  }
+function setCarColor(color, sourceEl) {
+  carColor = color
+  vehicle.setBodyColor(color)
+  for (const s of swatchEls) s.classList.toggle('active', s === sourceEl)
 }
 
-const customColor = document.createElement('input')
-customColor.type = 'color'
-customColor.value = '#ef4444'
-customColor.title = 'Custom colour'
-customColor.addEventListener('input', () => {
-  vehicle.setBodyColor(parseInt(customColor.value.slice(1), 16))
-  if (activeSwatch) activeSwatch.classList.remove('active')
-  activeSwatch = null
+function buildSwatches(container) {
+  for (const color of CAR_COLORS) {
+    const s = document.createElement('div')
+    s.className = 'swatch'
+    s.style.background = `#${color.toString(16).padStart(6, '0')}`
+    s.addEventListener('click', () => setCarColor(color, s))
+    if (color === carColor) s.classList.add('active')
+    swatchEls.push(s)
+    container.append(s)
+  }
+  const custom = document.createElement('input')
+  custom.type = 'color'
+  custom.value = `#${carColor.toString(16).padStart(6, '0')}`
+  custom.title = 'Custom colour'
+  custom.addEventListener('input', () => setCarColor(parseInt(custom.value.slice(1), 16), null))
+  container.append(custom)
+}
+
+buildSwatches(document.getElementById('car-colors'))
+buildSwatches(document.getElementById('menu-colors'))
+
+// --- Start menu + bird's-eye preview -----------------------------------------
+const menuEl = document.getElementById('menu')
+const openMenuBtn = document.getElementById('open-menu')
+const menuTrack = document.getElementById('menu-track')
+const menuHorizon = document.getElementById('menu-horizon')
+const menuTiles = document.getElementById('menu-tiles')
+const panelEl = document.getElementById('panel')
+const speedEl = document.getElementById('speed')
+
+function frameBirdview() {
+  debug.topView = true
+  debug.freeze = false
+  debug.topX = 0
+  debug.topZ = 0
+  debug.topY = 690 // high enough to see the whole 30×30 grid
+}
+
+function refreshMenuPreview() {
+  if (menuEl.classList.contains('hidden') || !track) return
+  frameBirdview()
+  menuHorizon.textContent = track.trackFile.horizonName
+  menuTiles.textContent = countDrivable(track.trackFile)
+}
+
+function openMenu() {
+  if (cameraMode === 'cockpit') setCameraMode('chase')
+  menuEl.classList.remove('hidden')
+  openMenuBtn.classList.add('hidden')
+  panelEl.classList.add('hidden')
+  speedEl.classList.add('hidden')
+  timerEl.classList.add('hidden')
+  refreshMenuPreview()
+}
+
+function startDriving() {
+  menuEl.classList.add('hidden')
+  openMenuBtn.classList.remove('hidden')
+  panelEl.classList.remove('hidden')
+  speedEl.classList.remove('hidden')
+  timerEl.classList.remove('hidden')
+  debug.topView = false
+  vehicle.respawn()
+  resetTimer()
+}
+
+menuTrack.addEventListener('change', (event) => {
+  loadTrackByUrl(event.target.value)
+  trackSelect.value = event.target.value
+  refreshMenuPreview()
 })
-carColorsEl.append(customColor)
+document.getElementById('menu-drive').addEventListener('click', startDriving)
+openMenuBtn.addEventListener('click', openMenu)
 
 // --- Chase camera ------------------------------------------------------------
 
@@ -543,3 +604,4 @@ function tick() {
 }
 
 tick()
+openMenu() // start on the menu with a bird's-eye preview
