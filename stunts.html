@@ -46,6 +46,14 @@
       }
       #speed span { font-size: 16px; color: #94a3b8; margin-left: 4px; }
 
+      #position { position: fixed; bottom: 16px; left: 20px; z-index: 10;
+        font-weight: 800; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
+      #position b { font-size: 40px; color: #fde047; }
+      #position span { font-size: 16px; color: #94a3b8; }
+      #sound-btn { position: fixed; top: 12px; right: 172px; z-index: 11; padding: 6px 10px;
+        font-size: 14px; cursor: pointer; background: rgba(15,23,42,0.82);
+        border: 1px solid rgba(148,163,184,0.3); border-radius: 8px; }
+
       #timer {
         position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 10;
         font-variant-numeric: tabular-nums; font-weight: 800; font-size: 34px;
@@ -223,6 +231,10 @@
     </div>
 
     <div id="speed"><b id="speed-value">0</b><span>km/h</span></div>
+
+    <div id="position"><b id="pos-value">1st</b><span> / 2</span></div>
+
+    <button id="sound-btn" title="Toggle sound">🔊</button>
 
     <div id="cockpit" class="hidden">
       <div class="roof"></div>

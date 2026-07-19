@@ -185,6 +185,100 @@ function updateOpponent(delta) {
   oppHint.classList.toggle('hidden', !near)
 }
 
+// --- Race position (you vs the opponent) -------------------------------------
+const posValue = document.getElementById('pos-value')
+const _posP = new THREE.Vector3()
+
+function updatePosition() {
+  if (!track || !track.route || track.route.length < 3 || !opponent.active) return
+  const route = track.route
+  const p = vehicle.group.position
+  let best = 0
+  let bestD = Infinity
+  for (let i = 0; i < route.length; i++) {
+    const d = route[i].distanceToSquared(p)
+    if (d < bestD) {
+      bestD = d
+      best = i
+    }
+  }
+  // Higher route index = further round the lap. (Single-lap approximation.)
+  posValue.textContent = best >= opponent.idx ? '1st' : '2nd'
+}
+
+// --- Sound (procedural engine + crash thud, no audio assets) -----------------
+let audioCtx = null
+let engineOsc = null
+let subOsc = null
+let engineGain = null
+let soundOn = true
+const soundBtn = document.getElementById('sound-btn')
+
+function initAudio() {
+  if (audioCtx) {
+    if (audioCtx.state === 'suspended') audioCtx.resume()
+    return
+  }
+  const AC = window.AudioContext || window.webkitAudioContext
+  if (!AC) return
+  audioCtx = new AC()
+  engineOsc = audioCtx.createOscillator()
+  engineOsc.type = 'sawtooth'
+  subOsc = audioCtx.createOscillator()
+  subOsc.type = 'square'
+  const filter = audioCtx.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.frequency.value = 950
+  engineGain = audioCtx.createGain()
+  engineGain.gain.value = 0
+  engineOsc.connect(filter)
+  subOsc.connect(filter)
+  filter.connect(engineGain)
+  engineGain.connect(audioCtx.destination)
+  engineOsc.frequency.value = 55
+  subOsc.frequency.value = 28
+  engineOsc.start()
+  subOsc.start()
+}
+
+function updateAudio(driving) {
+  if (!audioCtx || !soundOn) return
+  const t = audioCtx.currentTime
+  const spd = vehicle.speedKmh
+  const f = 55 + spd * 2.4
+  engineOsc.frequency.setTargetAtTime(f, t, 0.06)
+  subOsc.frequency.setTargetAtTime(f * 0.5, t, 0.06)
+  const boosting = vehicle.input.boost || vehicle.input.gamepadBoost
+  const target = (driving ? 0.05 : 0.022) * (boosting ? 1.5 : 1)
+  engineGain.gain.setTargetAtTime(target, t, 0.1)
+}
+
+function playThud() {
+  if (!audioCtx || !soundOn) return
+  const dur = 0.35
+  const buffer = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * dur), audioCtx.sampleRate)
+  const data = buffer.getChannelData(0)
+  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length)
+  const src = audioCtx.createBufferSource()
+  src.buffer = buffer
+  const lp = audioCtx.createBiquadFilter()
+  lp.type = 'lowpass'
+  lp.frequency.value = 500
+  const g = audioCtx.createGain()
+  g.gain.value = 0.45
+  src.connect(lp)
+  lp.connect(g)
+  g.connect(audioCtx.destination)
+  src.start()
+}
+
+soundBtn.addEventListener('click', () => {
+  soundOn = !soundOn
+  soundBtn.textContent = soundOn ? '🔊' : '🔇'
+  if (soundOn) initAudio()
+  else if (engineGain) engineGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05)
+})
+
 // --- Run / lap timer ---------------------------------------------------------
 // Starts on the player's first throttle input (not spawn drift) and resets on
 // respawn (R) or track load. On tracks with a start/finish tile it times laps:
@@ -691,6 +785,7 @@ function openMenu() {
   oppHint.classList.add('hidden')
   document.getElementById('view-btn').classList.add('hidden')
   document.getElementById('wrong-way').classList.add('hidden')
+  document.getElementById('position').classList.add('hidden')
   refreshMenuPreview()
 }
 
@@ -701,10 +796,12 @@ function startDriving() {
   speedEl.classList.remove('hidden')
   timerEl.classList.remove('hidden')
   document.getElementById('view-btn').classList.remove('hidden')
+  document.getElementById('position').classList.remove('hidden')
   debug.topView = false
   vehicle.respawn()
   resetTimer()
   resetOpponent() // opponent starts fresh alongside the player
+  if (soundOn) initAudio() // this click is the user gesture that unlocks audio
 }
 
 menuTrack.addEventListener('change', (event) => {
@@ -871,6 +968,7 @@ function triggerCrack() {
   }
   crackEl.classList.add('show')
   crackTimer = 2.6
+  playThud()
 }
 
 function clearCrack() {
@@ -939,6 +1037,8 @@ function tick() {
   const driving =
     vehicle.input.forward || vehicle.input.backward || Math.abs(vehicle.input.throttleAxis) > 0.05
   updateTimer(delta, driving, vehicle.group.position)
+  updatePosition()
+  updateAudio(driving)
 
   // Hard-crash detection: a big one-frame speed drop cracks the windshield.
   const spd = vehicle.speedKmh
