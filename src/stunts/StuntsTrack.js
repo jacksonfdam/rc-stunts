@@ -445,12 +445,9 @@ export class StuntsTrack {
     return describeElement(this.trackFile.trackAt(x, y)).drivable
   }
 
-  _tileHeight(x, y) {
-    const c = describeElement(this.trackFile.trackAt(x, y)).category
-    if (c === CATEGORY.ELEVATED || c === CATEGORY.ELEVATED_CORNER || c === CATEGORY.HIGHWAY) {
-      return ELEV_H
-    }
-    if (c === CATEGORY.RAMP) return ELEV_H / 2
+  _tileHeight() {
+    // All road pieces now render flush (elevated/ramps were flattened), so the
+    // opponent's route rides the road surface everywhere.
     return ROAD_H
   }
 

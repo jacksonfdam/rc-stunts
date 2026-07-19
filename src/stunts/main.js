@@ -615,8 +615,10 @@ function applyCar(car, swapModel) {
     vehicle.bodyModelParams.offsetY = car.url === baseCarUrl ? 0 : car.offsetY ?? -1.1
     vehicle.setBodyModel(car.url)
     // The low-poly car GLBs are body shells with no wheels, so always keep the
-    // raycast wheel visuals (they touch the ground, steer and spin).
+    // raycast wheel visuals; use slim car wheels for them and the chunky RC
+    // tyres only for the buggy.
     vehicle.setWheelsVisible(true)
+    vehicle.setSimpleWheels(car.url !== baseCarUrl)
   }
 }
 

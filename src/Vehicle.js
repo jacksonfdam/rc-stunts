@@ -373,6 +373,8 @@ export class Vehicle {
 
     this.wheelMeshes = []
     this.wheelVisualRoots = []
+    this._rcWheels = [] // loaded RC wheel GLBs, per corner (for toggling)
+    this._simpleWheels = false // slim car wheels vs the RC buggy's GLB wheels
     for (let i = 0; i < 4; i++) {
       const wheel = new THREE.Group()
       const visualRoot = new THREE.Group()
@@ -650,11 +652,51 @@ export class Vehicle {
     }
   }
 
-  /** Show/hide the raycast wheel visuals (hidden for full-car models that
-   *  already include their own wheels). */
+  /** Show/hide the raycast wheel visuals. */
   setWheelsVisible(visible) {
     if (!this.wheelVisualRoots) return
     for (const root of this.wheelVisualRoots) root.visible = visible
+  }
+
+  /**
+   * Swap the wheel look: slim clean car wheels for full-car models, or the RC
+   * buggy's chunky GLB tyres. Radius matches WHEEL_RADIUS so they stay grounded;
+   * only the width/style changes.
+   */
+  setSimpleWheels(on) {
+    if (this._simpleWheels === on || !this.wheelVisualRoots) {
+      this._simpleWheels = on
+      return
+    }
+    this._simpleWheels = on
+    for (let i = 0; i < this.wheelVisualRoots.length; i++) {
+      const root = this.wheelVisualRoots[i]
+      root.clear()
+      if (on) {
+        root.add(this._makeSimpleWheel())
+      } else if (this._rcWheels[i]) {
+        root.add(this._rcWheels[i])
+      }
+    }
+    this.applyWheelModelParams()
+  }
+
+  _makeSimpleWheel() {
+    const g = new THREE.Group()
+    const tire = new THREE.Mesh(
+      new THREE.CylinderGeometry(WHEEL_RADIUS, WHEEL_RADIUS, WHEEL_RADIUS * 0.5, 18),
+      new THREE.MeshStandardMaterial({ color: 0x0d0f14, roughness: 0.85 })
+    )
+    tire.rotation.z = Math.PI / 2 // axle along X (the roll axis)
+    tire.castShadow = true
+    g.add(tire)
+    const rim = new THREE.Mesh(
+      new THREE.CylinderGeometry(WHEEL_RADIUS * 0.5, WHEEL_RADIUS * 0.5, WHEEL_RADIUS * 0.54, 10),
+      new THREE.MeshStandardMaterial({ color: 0xb0b6c0, metalness: 0.6, roughness: 0.35 })
+    )
+    rim.rotation.z = Math.PI / 2
+    g.add(rim)
+    return g
   }
 
   /** Recolour the car's paint (placeholder body + GLB body paint materials). */
@@ -814,8 +856,11 @@ export class Vehicle {
         // The tire is round in y/z (the x axis is the axle), so the larger of
         // the two is the wheel diameter
         const fitted = fitModel(wheelRoot, Math.max(size.y, size.z), WHEEL_RADIUS * 2)
-        this.wheelVisualRoots[i].clear()
-        this.wheelVisualRoots[i].add(fitted)
+        this._rcWheels[i] = fitted
+        if (!this._simpleWheels) {
+          this.wheelVisualRoots[i].clear()
+          this.wheelVisualRoots[i].add(fitted)
+        }
         this.applyWheelModelParams()
       } catch (error) {
         console.warn(`Could not load wheel model ${i} — keeping placeholder`, error)
