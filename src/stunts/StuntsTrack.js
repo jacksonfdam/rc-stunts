@@ -26,7 +26,8 @@ const GROUND_Y = 0
 const ROAD_H = 0.15 // flat slab thickness — kept low so road sits nearly flush
 // with the grass; a taller slab shows dark side-walls where a curved corner
 // (a thin plane) meets a straight (a box), which reads as a broken seam.
-const ELEV_H = 6 // height of raised/elevated pieces
+const ELEV_H = 4 // height of raised/elevated pieces (kept modest so raised roads
+// read as a low overpass rather than a tall wall)
 const RAMP_RISE = ELEV_H // vertical rise across one ramp tile
 // Road pieces span the full tile so adjacent cells butt flush into one
 // continuous ribbon, as in the original game — no gaps between road blocks.
@@ -80,7 +81,9 @@ export class StuntsTrack {
 
   _buildGround() {
     const span = GRID * TILE
-    const geometry = new THREE.PlaneGeometry(span, span)
+    // Visual ground extends far past the grid so its edge never shows on the
+    // horizon — the distance just fades into fog / the sky dome.
+    const geometry = new THREE.PlaneGeometry(span * 8, span * 8)
     geometry.rotateX(-Math.PI / 2)
     const material = new THREE.MeshStandardMaterial({ color: 0x4b5d2f, roughness: 1 })
     const mesh = new THREE.Mesh(geometry, material)
@@ -88,8 +91,8 @@ export class StuntsTrack {
     mesh.receiveShadow = true
     this.group.add(mesh)
 
-    // Static ground plane collider. A rotated CANNON.Plane fails vehicle
-    // raycasts, so use a thick box just below the surface instead.
+    // Static ground plane collider (sized to the grid). A rotated CANNON.Plane
+    // fails vehicle raycasts, so use a thick box just below the surface instead.
     const body = new CANNON.Body({ mass: 0, material: this.physicsWorld.defaultMaterial })
     body.addShape(new CANNON.Box(new CANNON.Vec3(span / 2, 5, span / 2)))
     body.position.set(0, GROUND_Y - 5, 0)
@@ -117,9 +120,13 @@ export class StuntsTrack {
         break
       case CATEGORY.ELEVATED:
       case CATEGORY.ELEVATED_CORNER:
+        this._addElevated(el, center)
+        break
+      // Highways are wide ground-level roads, and corkscrews twist along the
+      // ground here — neither is a raised block, so render them flush.
       case CATEGORY.HIGHWAY:
       case CATEGORY.CORKSCREW:
-        this._addElevated(el, center)
+        this._addFlat(el, center)
         break
       case CATEGORY.LOOP:
         this._addLoop(el, center)

@@ -20,8 +20,41 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping
 container.appendChild(renderer.domElement)
 
 const scene = new THREE.Scene()
-scene.background = new THREE.Color(0x8fb7d6)
-scene.fog = new THREE.Fog(0x8fb7d6, TILE * 12, TILE * 26)
+const HORIZON_COLOR = 0x9cc3e0
+scene.background = new THREE.Color(HORIZON_COLOR)
+// Fog fades distant ground into the horizon colour so the ground's edge and the
+// sky-dome base blend into one seamless horizon band.
+scene.fog = new THREE.Fog(HORIZON_COLOR, TILE * 16, TILE * 40)
+
+// Gradient sky dome: deep blue overhead easing to the horizon colour at the
+// skyline. Unfogged and drawn behind everything.
+const skyMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide,
+  fog: false,
+  depthWrite: false,
+  uniforms: {
+    topColor: { value: new THREE.Color(0x2f6bb0) },
+    horizonColor: { value: new THREE.Color(HORIZON_COLOR) },
+  },
+  vertexShader: `
+    varying vec3 vDir;
+    void main() {
+      vDir = normalize(position);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    varying vec3 vDir;
+    uniform vec3 topColor;
+    uniform vec3 horizonColor;
+    void main() {
+      float h = clamp(vDir.y, 0.0, 1.0);
+      gl_FragColor = vec4(mix(horizonColor, topColor, pow(h, 0.6)), 1.0);
+    }
+  `,
+})
+const sky = new THREE.Mesh(new THREE.SphereGeometry(3200, 32, 16), skyMat)
+scene.add(sky)
 
 const camera = new THREE.PerspectiveCamera(
   60,
