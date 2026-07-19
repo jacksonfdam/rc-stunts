@@ -425,9 +425,17 @@ function loadTrack(trackFile, name) {
   if (track) track.dispose()
   track = new StuntsTrack(scene, physicsWorld, trackFile)
 
-  // Spawn the car just above the first drivable tile, nose pointing +Z.
+  // Spawn just above the start tile, facing along the track (route[0]→route[1])
+  // so the car starts in the correct racing direction, not against it.
   vehicle.spawnPosition.set(track.start.x, track.start.y + 2, track.start.z)
-  vehicle.spawnQuaternion.set(0, 0, 0, 1)
+  if (track.route && track.route.length >= 2) {
+    const a = track.route[0]
+    const b = track.route[1]
+    const yaw = Math.atan2(b.x - a.x, b.z - a.z) // nose (+Z) → (sin,cos)
+    vehicle.spawnQuaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yaw)
+  } else {
+    vehicle.spawnQuaternion.set(0, 0, 0, 1)
+  }
   vehicle.respawn()
 
   document.getElementById('track-name').textContent = name
@@ -728,6 +736,9 @@ function setCameraMode(mode) {
 }
 
 function cycleCameraMode() {
+  // No view switching while the start menu (bird's-eye) is up — otherwise the
+  // top-down preview stays on and just overlays the cockpit frame.
+  if (!menuEl.classList.contains('hidden')) return
   const i = CAMERA_VIEWS.indexOf(cameraMode)
   setCameraMode(CAMERA_VIEWS[(i + 1) % CAMERA_VIEWS.length])
 }
