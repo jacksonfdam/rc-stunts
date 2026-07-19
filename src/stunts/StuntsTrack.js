@@ -40,6 +40,9 @@ export class StuntsTrack {
     this.scene.add(this.group)
     this.colliderBodies = []
     this._materials = new Map()
+    // Loop descriptors (centre, radius, travel/width axes) so the game loop can
+    // apply a stick-to-surface assist that carries the car around the loop.
+    this.loops = []
 
     // Centre the grid on the origin so (0,0) tile sits at -halfExtent.
     this.origin = -((GRID - 1) * TILE) / 2
@@ -305,7 +308,23 @@ export class StuntsTrack {
         [halfW, y, z],
       ])
     }
-    this._addSweptSurface(rings, center, this._yaw(el.orient), el.color)
+    const yaw = this._yaw(el.orient)
+    this._addSweptSurface(rings, center, yaw, el.color)
+
+    // Record the loop for the stick-to-surface assist. The circle lies in the
+    // vertical plane through the travel axis; its centre is one radius above the
+    // entry tile. wx/wz is the horizontal width axis (out-of-plane direction).
+    this.loops.push({
+      cx: center.x,
+      cz: center.z,
+      cy: RL, // circle centre height (entry is at y=0)
+      RL,
+      halfW,
+      wx: Math.cos(yaw), // horizontal width axis (out of loop plane)
+      wz: -Math.sin(yaw),
+      tdx: Math.sin(yaw), // horizontal travel direction (into the loop)
+      tdz: Math.cos(yaw),
+    })
   }
 
   _addPipe(el, center) {

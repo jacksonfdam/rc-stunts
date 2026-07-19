@@ -141,6 +141,78 @@ window.addEventListener('keydown', (event) => {
   if (event.code === 'KeyR') resetTimer()
 })
 
+// --- Loop assist -------------------------------------------------------------
+// A raycast vehicle can't complete a vertical loop on physics alone (it rams the
+// curving surface and bleeds speed). While the car is on a loop and moving fast,
+// press it toward the loop surface (centripetal help, scaled up toward the top)
+// and align its roof to the inward normal so the wheels stay on the ribbon.
+const UP_VEC = new CANNON.Vec3(0, 1, 0)
+const _loopUp = new CANNON.Vec3()
+const _loopAxis = new CANNON.Vec3()
+const clampf = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
+
+function updateLoopAssist() {
+  if (!track || !track.loops.length || vehicle.speedKmh < 18) return
+  const b = vehicle.chassisBody
+  const P = b.position
+  for (const L of track.loops) {
+    const dx = P.x - L.cx
+    const dy = P.y - L.cy
+    const dz = P.z - L.cz
+    const wdist = dx * L.wx + dz * L.wz // distance out of the loop plane
+    if (Math.abs(wdist) > L.halfW + 4) continue
+    const ix = dx - wdist * L.wx
+    const iy = dy
+    const iz = dz - wdist * L.wz
+    const radial = Math.hypot(ix, iy, iz)
+    if (radial > L.RL + 32 || radial < L.RL - 30) continue
+
+    // Unit vector toward the circle centre (the inward surface normal).
+    const nx = -ix / radial
+    const ny = -iy / radial
+    const nz = -iz / radial
+    const heightFactor = clampf(P.y / (2 * L.RL), 0, 1)
+    const m = b.mass
+
+    // 1) Hold the car on the tube: moderate radial spring toward radius = RL,
+    //    plus centripetal help that grows toward the top so it can't fall off.
+    const inward = m * 9.82 * 3.6 * heightFactor + 90 * (radial - L.RL)
+    b.applyForce(new CANNON.Vec3(nx * inward, ny * inward, nz * inward))
+
+    // 2) Forward tangent from the car's ANGLE around the loop (reliable even
+    //    when nearly stalled, unlike using instantaneous velocity). With the
+    //    in-plane offset split into travel (s) and vertical (u) components,
+    //    cosα = -u/radial, sinα = s/radial, and the forward tangent is
+    //    travelDir*cosα + up*sinα.
+    const s = ix * L.tdx + iz * L.tdz
+    const cosA = -iy / radial
+    const sinA = s / radial
+    const fx = L.tdx * cosA
+    const fy = sinA
+    const fz = L.tdz * cosA
+    const vTan = b.velocity.x * fx + b.velocity.y * fy + b.velocity.z * fz
+    // Motorise the loop toward a target speed so it can't stall on the climb.
+    const TARGET = 60
+    const deficit = TARGET - vTan
+    if (deficit > 0) {
+      const f = m * 32 * clampf(deficit / TARGET, 0, 1)
+      b.applyForce(new CANNON.Vec3(fx * f, fy * f, fz * f))
+    }
+
+    // 3) Rail the rotation: steer the car's angular velocity toward the rate
+    //    the loop demands (ω = v/RL about the width axis, sign = travelDir×up =
+    //    -widthAxis) so the chassis keeps tumbling with the loop and the wheels
+    //    stay on the ribbon instead of the body detaching past vertical.
+    const omega = vTan / L.RL
+    const oxT = -L.wx * omega
+    const ozT = -L.wz * omega
+    const blend = 0.45 * clampf(heightFactor + 0.15, 0, 1)
+    b.angularVelocity.x += (oxT - b.angularVelocity.x) * blend
+    b.angularVelocity.z += (ozT - b.angularVelocity.z) * blend
+    b.angularVelocity.y += (0 - b.angularVelocity.y) * blend * 0.5
+  }
+}
+
 // --- Track -------------------------------------------------------------------
 
 let track = null
@@ -294,6 +366,7 @@ function tick() {
 
   physicsWorld.step(FIXED_STEP, delta, 3)
   vehicle.update(delta)
+  updateLoopAssist()
   if (debug.topView) updateTopView()
   else if (!debug.freeze) updateCamera(delta)
   // Fog would hide the whole track from the high top-down camera.
