@@ -65,6 +65,39 @@ const skyMat = new THREE.ShaderMaterial({
 const sky = new THREE.Mesh(new THREE.SphereGeometry(3200, 32, 16), skyMat)
 scene.add(sky)
 
+// Distant mountain band so the horizon isn't empty. Two rings of low-poly
+// peaks (green hills in front, grey/snow behind) circling the scene; unfogged
+// so they read clearly on the skyline.
+function buildHorizon() {
+  const ring = new THREE.Group()
+  const hillMat = new THREE.MeshStandardMaterial({ color: 0x3f5d38, roughness: 1, flatShading: true, fog: false })
+  const peakMat = new THREE.MeshStandardMaterial({ color: 0x8892a0, roughness: 1, flatShading: true, fog: false })
+  const snowMat = new THREE.MeshStandardMaterial({ color: 0xeef2f7, roughness: 1, flatShading: true, fog: false })
+  const layers = [
+    { count: 90, R: 900, base: 60, vary: 90, rad: 90, mat: hillMat, snow: false },
+    { count: 70, R: 1050, base: 130, vary: 170, rad: 120, mat: peakMat, snow: true },
+  ]
+  for (const L of layers) {
+    for (let i = 0; i < L.count; i++) {
+      const a = (i / L.count) * Math.PI * 2 + ((i * 37) % 13) * 0.01
+      const h = L.base + ((i * 53) % L.vary)
+      const r = L.R + ((i * 29) % 140)
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(L.rad + ((i * 17) % 50), h, 5), L.mat)
+      cone.position.set(Math.cos(a) * r, h / 2 - 30, Math.sin(a) * r)
+      cone.rotation.y = i * 1.3
+      ring.add(cone)
+      if (L.snow && h > 200) {
+        const cap = new THREE.Mesh(new THREE.ConeGeometry((L.rad + ((i * 17) % 50)) * 0.4, h * 0.28, 5), snowMat)
+        cap.position.set(cone.position.x, cone.position.y + h * 0.36, cone.position.z)
+        cap.rotation.y = cone.rotation.y
+        ring.add(cap)
+      }
+    }
+  }
+  scene.add(ring)
+}
+buildHorizon()
+
 const camera = new THREE.PerspectiveCamera(
   60,
   window.innerWidth / window.innerHeight,

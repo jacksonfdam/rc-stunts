@@ -116,6 +116,13 @@ export class StuntsTrack {
 
   _buildPiece(el, center, x, y) {
     switch (el.category) {
+      case CATEGORY.RAMP:
+        this._addRamp(el, center)
+        break
+      case CATEGORY.ELEVATED:
+      case CATEGORY.ELEVATED_CORNER:
+        this._addElevated(el, center)
+        break
       case CATEGORY.LOOP:
         this._addLoop(el, center)
         break
@@ -217,18 +224,32 @@ export class StuntsTrack {
   }
 
   _addElevated(el, center) {
-    // A solid embankment from the ground up to road height, so raised roads read
-    // as a supported plateau instead of a slab floating on a thin pillar. The top
-    // sits at ELEV_H, matching a ramp's high end so the two connect flush.
+    // A raised bridge span: an earthen support block up to ELEV_H (matching the
+    // ramps' brown), with a paved road cap on top. The top sits at ELEV_H so a
+    // ramp's high end meets it flush.
     const w = TILE * INSET
-    const h = ELEV_H
-    const geometry = new THREE.BoxGeometry(w, h, w)
-    const mesh = new THREE.Mesh(geometry, this._material(el.color))
-    mesh.position.set(center.x, GROUND_Y + h / 2, center.z)
-    mesh.castShadow = true
-    mesh.receiveShadow = true
-    this.group.add(mesh)
-    this._addBoxCollider(mesh.position, new CANNON.Vec3(w / 2, h / 2, w / 2))
+    const support = new THREE.Mesh(
+      new THREE.BoxGeometry(w, ELEV_H, w),
+      this._material(0x6d5a34)
+    )
+    support.position.set(center.x, GROUND_Y + ELEV_H / 2, center.z)
+    support.castShadow = true
+    support.receiveShadow = true
+    this.group.add(support)
+
+    const cap = new THREE.Mesh(
+      new THREE.BoxGeometry(w, ROAD_H, w),
+      this._material(0x44454b)
+    )
+    cap.position.set(center.x, GROUND_Y + ELEV_H + ROAD_H / 2, center.z)
+    cap.castShadow = true
+    cap.receiveShadow = true
+    this.group.add(cap)
+
+    this._addBoxCollider(
+      new THREE.Vector3(center.x, GROUND_Y + ELEV_H / 2, center.z),
+      new CANNON.Vec3(w / 2, (ELEV_H + ROAD_H) / 2, w / 2)
+    )
   }
 
   /**
@@ -445,9 +466,10 @@ export class StuntsTrack {
     return describeElement(this.trackFile.trackAt(x, y)).drivable
   }
 
-  _tileHeight() {
-    // All road pieces now render flush (elevated/ramps were flattened), so the
-    // opponent's route rides the road surface everywhere.
+  _tileHeight(x, y) {
+    const c = describeElement(this.trackFile.trackAt(x, y)).category
+    if (c === CATEGORY.ELEVATED || c === CATEGORY.ELEVATED_CORNER) return ELEV_H
+    if (c === CATEGORY.RAMP) return ELEV_H / 2
     return ROAD_H
   }
 
