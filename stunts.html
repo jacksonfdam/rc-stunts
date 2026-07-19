@@ -43,9 +43,13 @@
         font-variant-numeric: tabular-nums; font-weight: 800; font-size: 34px;
         letter-spacing: 1px; color: #fde047; text-shadow: 0 2px 8px rgba(0,0,0,0.7);
       }
-      #timer.idle { color: #94a3b8; }
+      #timer.idle #timer-value { color: #94a3b8; }
       #timer small { display: block; text-align: center; font-size: 11px;
         font-weight: 700; letter-spacing: 2px; color: #94a3b8; text-shadow: none; }
+      #lap-info { text-align: center; margin-top: 2px; font-size: 13px; font-weight: 700;
+        color: #cbd5e1; text-shadow: 0 1px 4px rgba(0,0,0,0.7); }
+      #lap-info b { color: #34d399; }
+      #lap-info.hidden { display: none; }
     </style>
   </head>
   <body>
@@ -62,7 +66,11 @@
       <div class="hint">WASD / arrows to drive · Shift boost · Space jump · R respawn</div>
     </div>
 
-    <div id="timer" class="idle"><small>TIME</small><span id="timer-value">0:00.000</span></div>
+    <div id="timer" class="idle">
+      <small id="timer-label">TIME</small>
+      <span id="timer-value">0:00.000</span>
+      <div id="lap-info" class="hidden">Lap <b id="lap-count">1</b> · Best <span id="best-lap">—</span></div>
+    </div>
 
     <div id="speed"><b id="speed-value">0</b><span>km/h</span></div>
 

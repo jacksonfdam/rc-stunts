@@ -44,6 +44,9 @@ export class StuntsTrack {
     // Centre the grid on the origin so (0,0) tile sits at -halfExtent.
     this.origin = -((GRID - 1) * TILE) / 2
 
+    // Set by _findStart: whether the track has a real start/finish tile (so lap
+    // timing is meaningful) — false tracks just spawn at the first road tile.
+    this.hasStart = false
     this._buildGround()
     this._buildTiles()
     this.start = this._findStart()
@@ -336,7 +339,10 @@ export class StuntsTrack {
         if (!el.drivable) continue
         const pos = this.tileToWorld(x, y)
         pos.y = GROUND_Y + 3
-        if (el.category === CATEGORY.START) return pos
+        if (el.category === CATEGORY.START) {
+          this.hasStart = true
+          return pos
+        }
         if (!firstDrivable) firstDrivable = pos
       }
     }

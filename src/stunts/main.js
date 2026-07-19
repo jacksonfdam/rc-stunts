@@ -65,19 +65,39 @@ physicsWorld.defaultContactMaterial.friction = 0.3
 
 const vehicle = new Vehicle(scene, physicsWorld)
 
-// --- Run timer ---------------------------------------------------------------
-// A stopwatch that starts the moment the car first moves and resets on respawn
-// (R) or when a new track loads, so you can time a run.
+// --- Run / lap timer ---------------------------------------------------------
+// Starts on the player's first throttle input (not spawn drift) and resets on
+// respawn (R) or track load. On tracks with a start/finish tile it times laps:
+// the big readout is the current lap, and it records the best lap and lap count
+// each time the car crosses the start tile. Tracks without a start tile fall
+// back to a plain elapsed-time stopwatch.
 const timerEl = document.getElementById('timer')
 const timerValue = document.getElementById('timer-value')
+const timerLabel = document.getElementById('timer-label')
+const lapInfo = document.getElementById('lap-info')
+const lapCountEl = document.getElementById('lap-count')
+const bestLapEl = document.getElementById('best-lap')
+const START_RADIUS = TILE * 0.6 // how close counts as "on" the start tile
+const MIN_LAP_SECONDS = 2 // debounce so one crossing can't count twice
+
 let runTime = 0
 let timing = false
+let lapStart = 0
+let bestLap = Infinity
+let lapCount = 1
+let wasOnStart = true // car spawns on the start tile
 
 function resetTimer() {
   runTime = 0
   timing = false
+  lapStart = 0
+  bestLap = Infinity
+  lapCount = 1
+  wasOnStart = true
   timerEl.classList.add('idle')
   timerValue.textContent = '0:00.000'
+  lapCountEl.textContent = '1'
+  bestLapEl.textContent = '—'
 }
 
 function formatTime(seconds) {
@@ -87,15 +107,31 @@ function formatTime(seconds) {
   return `${m}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`
 }
 
-function updateTimer(delta, driving) {
-  // Start on the player's first throttle input (not spawn drift), then keep
-  // running even while coasting until reset.
+function updateTimer(delta, driving, carPos) {
   if (!timing && driving) {
     timing = true
     timerEl.classList.remove('idle')
   }
-  if (timing) {
-    runTime += delta
+  if (!timing) return
+  runTime += delta
+
+  if (track && track.hasStart) {
+    const dx = carPos.x - track.start.x
+    const dz = carPos.z - track.start.z
+    const onStart = dx * dx + dz * dz < START_RADIUS * START_RADIUS
+    const lapElapsed = runTime - lapStart
+    if (onStart && !wasOnStart && lapElapsed > MIN_LAP_SECONDS) {
+      if (lapElapsed < bestLap) {
+        bestLap = lapElapsed
+        bestLapEl.textContent = formatTime(bestLap)
+      }
+      lapStart = runTime
+      lapCount++
+      lapCountEl.textContent = String(lapCount)
+    }
+    wasOnStart = onStart
+    timerValue.textContent = formatTime(runTime - lapStart)
+  } else {
     timerValue.textContent = formatTime(runTime)
   }
 }
@@ -132,6 +168,9 @@ function loadTrack(trackFile, name) {
   document.getElementById('horizon-name').textContent = trackFile.horizonName
   document.getElementById('tile-count').textContent = countDrivable(trackFile)
   resetTimer()
+  // Show lap UI only when the track has a start/finish tile to time against.
+  lapInfo.classList.toggle('hidden', !track.hasStart)
+  timerLabel.textContent = track.hasStart ? 'LAP TIME' : 'TIME'
 }
 
 loadTrack(createDemoTrackFile(), 'demo loop')
@@ -240,7 +279,7 @@ function updateTopView() {
   camera.position.set(debug.topX, debug.topY, debug.topZ + 0.01)
   camera.lookAt(debug.topX, 0, debug.topZ)
 }
-window.__stunts = { scene, camera, renderer, debug, get track() { return track } }
+window.__stunts = { scene, camera, renderer, vehicle, debug, get track() { return track } }
 
 // --- Loop --------------------------------------------------------------------
 
@@ -272,7 +311,7 @@ function tick() {
   speedValue.textContent = Math.round(vehicle.speedKmh)
   const driving =
     vehicle.input.forward || vehicle.input.backward || Math.abs(vehicle.input.throttleAxis) > 0.05
-  updateTimer(delta, driving)
+  updateTimer(delta, driving, vehicle.group.position)
 
   renderer.render(scene, camera)
   requestAnimationFrame(tick)
