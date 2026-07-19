@@ -59,6 +59,10 @@
       #lap-info b { color: #34d399; }
       #lap-info.hidden { display: none; }
 
+      #opp-hint { position: fixed; top: 46%; left: 50%; transform: translateX(-50%); z-index: 9;
+        font-weight: 800; font-size: 22px; letter-spacing: 1px; color: #f8fafc;
+        text-shadow: 0 2px 8px rgba(0,0,0,0.85); pointer-events: none; }
+
       .hidden { display: none !important; }
 
       /* Cockpit overlay: A-pillars + dashboard framing the windshield. */
@@ -198,6 +202,8 @@
       <div id="car-colors"></div>
       <div class="hint">WASD / arrows to drive · Shift boost · Space jump · R respawn · C cockpit</div>
     </div>
+
+    <div id="opp-hint" class="hidden">◄ Opponent Near</div>
 
     <div id="timer" class="idle">
       <small id="timer-label">TIME</small>

@@ -65,6 +65,80 @@ physicsWorld.defaultContactMaterial.friction = 0.3
 
 const vehicle = new Vehicle(scene, physicsWorld)
 
+// --- AI opponent -------------------------------------------------------------
+// A ghost car that drives the track's route (see StuntsTrack._buildRoute). It's
+// not physics-driven — it advances along the ordered tile-centre path at a fixed
+// pace and orients to its heading, so it reliably completes the circuit.
+const oppHint = document.getElementById('opp-hint')
+
+function buildOpponentCar() {
+  const g = new THREE.Group()
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(3.4, 1.1, 6),
+    new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.4, metalness: 0.1 })
+  )
+  body.position.y = 1.1
+  body.castShadow = true
+  g.add(body)
+  const cabin = new THREE.Mesh(
+    new THREE.BoxGeometry(2.6, 0.9, 2.6),
+    new THREE.MeshStandardMaterial({ color: 0xdbeafe, roughness: 0.3 })
+  )
+  cabin.position.set(0, 1.9, -0.2)
+  g.add(cabin)
+  const wheelGeo = new THREE.CylinderGeometry(1, 1, 0.8, 12)
+  wheelGeo.rotateZ(Math.PI / 2)
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111318, roughness: 0.8 })
+  for (const [x, z] of [[-1.8, 2], [1.8, 2], [-1.8, -2], [1.8, -2]]) {
+    const w = new THREE.Mesh(wheelGeo, wheelMat)
+    w.position.set(x, 0.9, z)
+    g.add(w)
+  }
+  return g
+}
+
+const opponent = { group: buildOpponentCar(), idx: 0, t: 0, speed: 21, active: false }
+scene.add(opponent.group)
+opponent.group.visible = false
+const _oppDir = new THREE.Vector3()
+
+function resetOpponent() {
+  opponent.idx = 0
+  opponent.t = 0
+  opponent.active = !!(track && track.route && track.route.length > 2)
+  opponent.group.visible = opponent.active
+  if (opponent.active) opponent.group.position.copy(track.route[0])
+}
+
+function updateOpponent(delta) {
+  if (!opponent.active) return
+  const route = track.route
+  let remaining = opponent.speed * delta
+  // Walk forward along the route by `remaining` world units.
+  for (let guard = 0; guard < route.length + 2 && remaining > 0; guard++) {
+    const a = route[opponent.idx]
+    const b = route[(opponent.idx + 1) % route.length]
+    const segLen = a.distanceTo(b) || 0.0001
+    const segLeft = segLen * (1 - opponent.t)
+    if (remaining < segLeft) {
+      opponent.t += remaining / segLen
+      remaining = 0
+    } else {
+      remaining -= segLeft
+      opponent.idx = (opponent.idx + 1) % route.length
+      opponent.t = 0
+    }
+  }
+  const a = route[opponent.idx]
+  const b = route[(opponent.idx + 1) % route.length]
+  opponent.group.position.lerpVectors(a, b, opponent.t)
+  _oppDir.copy(b).sub(a)
+  if (_oppDir.lengthSq() > 0.0001) opponent.group.rotation.y = Math.atan2(_oppDir.x, _oppDir.z)
+
+  const near = opponent.group.position.distanceTo(vehicle.group.position) < TILE * 1.6
+  oppHint.classList.toggle('hidden', !near)
+}
+
 // --- Run / lap timer ---------------------------------------------------------
 // Starts on the player's first throttle input (not spawn drift) and resets on
 // respawn (R) or track load. On tracks with a start/finish tile it times laps:
@@ -327,6 +401,7 @@ function loadTrack(trackFile, name) {
   document.getElementById('horizon-name').textContent = trackFile.horizonName
   document.getElementById('tile-count').textContent = countDrivable(trackFile)
   resetTimer()
+  resetOpponent()
   // Show lap UI only when the track has a start/finish tile to time against.
   lapInfo.classList.toggle('hidden', !track.hasStart)
   timerLabel.textContent = track.hasStart ? 'LAP TIME' : 'TIME'
@@ -542,6 +617,7 @@ function openMenu() {
   panelEl.classList.add('hidden')
   speedEl.classList.add('hidden')
   timerEl.classList.add('hidden')
+  oppHint.classList.add('hidden')
   refreshMenuPreview()
 }
 
@@ -710,6 +786,7 @@ function tick() {
   physicsWorld.step(FIXED_STEP, delta, 3)
   vehicle.update(delta)
   updateLoopAssist()
+  updateOpponent(delta)
   if (debug.topView) updateTopView()
   else if (debug.freeze) {
     // manual/frozen camera — leave it where it is

@@ -55,6 +55,8 @@ export class StuntsTrack {
     this._buildGround()
     this._buildTiles()
     this.start = this._findStart()
+    this.route = []
+    this._buildRoute()
   }
 
   /** World-space centre of grid tile (x, y). y counts from the bottom row. */
@@ -387,6 +389,7 @@ export class StuntsTrack {
   /** Spawn point: first start/finish tile, else first drivable road tile. */
   _findStart() {
     let firstDrivable = null
+    let firstCell = null
     for (let y = 0; y < GRID; y++) {
       for (let x = 0; x < GRID; x++) {
         const el = describeElement(this.trackFile.trackAt(x, y))
@@ -395,12 +398,77 @@ export class StuntsTrack {
         pos.y = GROUND_Y + 3
         if (el.category === CATEGORY.START) {
           this.hasStart = true
+          this.startCell = { x, y }
           return pos
         }
-        if (!firstDrivable) firstDrivable = pos
+        if (!firstDrivable) {
+          firstDrivable = pos
+          firstCell = { x, y }
+        }
       }
     }
+    this.startCell = firstCell ?? { x: 15, y: 15 }
     return firstDrivable ?? new THREE.Vector3(0, 3, 0)
+  }
+
+  _drivableAt(x, y) {
+    if (x < 0 || x >= GRID || y < 0 || y >= GRID) return false
+    return describeElement(this.trackFile.trackAt(x, y)).drivable
+  }
+
+  _tileHeight(x, y) {
+    const c = describeElement(this.trackFile.trackAt(x, y)).category
+    if (c === CATEGORY.ELEVATED || c === CATEGORY.ELEVATED_CORNER || c === CATEGORY.HIGHWAY) {
+      return ELEV_H
+    }
+    if (c === CATEGORY.RAMP) return ELEV_H / 2
+    return ROAD_H
+  }
+
+  /**
+   * Trace an ordered lap route (world-space tile centres) for the AI opponent:
+   * a greedy walk from the start tile that follows drivable neighbours, preferring
+   * to keep going straight, until it loops back or dead-ends. Good enough to send
+   * a ghost car roughly around the circuit.
+   */
+  _buildRoute() {
+    const route = []
+    const start = this.startCell
+    if (!start) {
+      this.route = route
+      return
+    }
+    const DIRS = [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ]
+    const key = (c) => c.y * GRID + c.x
+    const visited = new Set()
+    let cur = { ...start }
+    let prev = null
+    let lastDir = null
+    const centre = new THREE.Vector3()
+    for (let step = 0; step < GRID * GRID; step++) {
+      this.tileToWorld(cur.x, cur.y, centre)
+      route.push(new THREE.Vector3(centre.x, this._tileHeight(cur.x, cur.y) + 1.5, centre.z))
+      visited.add(key(cur))
+
+      const cands = DIRS.map(([dx, dy]) => ({ x: cur.x + dx, y: cur.y + dy, dx, dy })).filter(
+        (n) => this._drivableAt(n.x, n.y) && !(prev && n.x === prev.x && n.y === prev.y)
+      )
+      if (!cands.length) break
+      let next =
+        (lastDir && cands.find((n) => n.dx === lastDir.dx && n.dy === lastDir.dy)) ||
+        cands.find((n) => !visited.has(key(n))) ||
+        cands[0]
+      lastDir = { dx: next.dx, dy: next.dy }
+      prev = cur
+      cur = { x: next.x, y: next.y }
+      if (route.length > 3 && cur.x === start.x && cur.y === start.y) break
+    }
+    this.route = route
   }
 
   dispose() {
