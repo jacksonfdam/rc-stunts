@@ -108,12 +108,12 @@ export class StuntsTrack {
         const el = describeElement(this.trackFile.trackAt(x, y))
         if (el.empty) continue
         this.tileToWorld(x, y, center)
-        this._buildPiece(el, center)
+        this._buildPiece(el, center, x, y)
       }
     }
   }
 
-  _buildPiece(el, center) {
+  _buildPiece(el, center, x, y) {
     switch (el.category) {
       case CATEGORY.RAMP:
         this._addRamp(el, center)
@@ -121,12 +121,6 @@ export class StuntsTrack {
       case CATEGORY.ELEVATED:
       case CATEGORY.ELEVATED_CORNER:
         this._addElevated(el, center)
-        break
-      // Highways are wide ground-level roads, and corkscrews twist along the
-      // ground here — neither is a raised block, so render them flush.
-      case CATEGORY.HIGHWAY:
-      case CATEGORY.CORKSCREW:
-        this._addFlat(el, center)
         break
       case CATEGORY.LOOP:
         this._addLoop(el, center)
@@ -141,8 +135,11 @@ export class StuntsTrack {
       case CATEGORY.BUILDING:
         this._addBuilding(el, center)
         break
-      default: // ROAD, CORNER, JUNCTION, CHICANE, BANKED, START, FILLER
-        this._addFlat(el, center)
+      // ROAD, CORNER, JUNCTION, CHICANE, BANKED, START, FILLER, HIGHWAY,
+      // CORKSCREW — flush road; convex outer corners are rounded from the
+      // neighbour layout (orientation-independent, so never inverted).
+      default:
+        this._addFlat(el, center, x, y)
     }
   }
 
@@ -151,7 +148,38 @@ export class StuntsTrack {
     return orient * (Math.PI / 2)
   }
 
-  _addFlat(el, center) {
+  _addFlat(el, center, x, y) {
+    // A tile whose only two drivable orthogonal neighbours are perpendicular is
+    // a bend — render a curved road pie whose apex is the vertex where those two
+    // road edges meet (grass on the outer corner). Derived from the neighbour
+    // layout, so the curve always matches the actual turn and is never inverted.
+    if (x !== undefined) {
+      const N = this._drivableAt(x, y + 1)
+      const S = this._drivableAt(x, y - 1)
+      const E = this._drivableAt(x + 1, y)
+      const W = this._drivableAt(x - 1, y)
+      if (N + S + E + W === 2 && !(N && S) && !(E && W)) {
+        const h = TILE / 2
+        const HALF = Math.PI / 2
+        let m
+        if (N && E) m = { ox: +h, oz: +h, theta: HALF }
+        else if (N && W) m = { ox: -h, oz: +h, theta: 0 }
+        else if (S && E) m = { ox: +h, oz: -h, theta: Math.PI }
+        else m = { ox: -h, oz: -h, theta: 3 * HALF } // S && W
+        const geometry = new THREE.RingGeometry(0, TILE, 40, 1, m.theta, HALF)
+        geometry.rotateX(-HALF)
+        const mesh = new THREE.Mesh(geometry, this._material(el.color))
+        mesh.position.set(center.x + m.ox, GROUND_Y + ROAD_H, center.z + m.oz)
+        mesh.receiveShadow = true
+        this.group.add(mesh)
+        this._addBoxCollider(
+          new THREE.Vector3(center.x, GROUND_Y + ROAD_H / 2, center.z),
+          new CANNON.Vec3(TILE / 2, ROAD_H / 2, TILE / 2)
+        )
+        return
+      }
+    }
+
     const w = TILE * INSET
     const geometry = new THREE.BoxGeometry(w, ROAD_H, w)
     const mesh = new THREE.Mesh(geometry, this._material(el.color))
