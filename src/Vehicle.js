@@ -318,6 +318,11 @@ export class Vehicle {
 
     // --- Chassis: a simple stylized car out of boxes ---
     const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.35, metalness: 0.15 })
+    // Paint materials that setBodyColor() recolours (placeholder body + GLB body
+    // paint; glass/lights/trim are excluded by heuristic in _loadModels).
+    this._placeholderBodyMaterial = bodyMaterial
+    this._bodyPaintMaterials = [bodyMaterial]
+    this._bodyColor = 0xef4444
     const darkMaterial = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.6 })
     const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x93c5fd, roughness: 0.1, metalness: 0.4 })
 
@@ -645,6 +650,15 @@ export class Vehicle {
     }
   }
 
+  /** Recolour the car's paint (placeholder body + GLB body paint materials). */
+  setBodyColor(color) {
+    this._bodyColor = color
+    for (const material of this._bodyPaintMaterials) {
+      material.color.set(color)
+      material.needsUpdate = true
+    }
+  }
+
   /** Push the GUI transform tweaks to the loaded body model (no-op until it loads). */
   applyBodyModelParams() {
     const holder = this._bodyModelHolder
@@ -714,6 +728,21 @@ export class Vehicle {
         this._bodyModelHolder = fitted
         this._bodyModelFitScale = fitted.scale.x
         this.applyBodyModelParams()
+
+        // Collect the body's paint materials so the car colour is adjustable.
+        // Skip glass/lights/trim: transparent materials, or ones named
+        // glass/window/light/lamp/chrome.
+        fitted.traverse((child) => {
+          if (!child.isMesh || !child.material) return
+          const mats = Array.isArray(child.material) ? child.material : [child.material]
+          for (const m of mats) {
+            const name = `${m.name} ${child.name}`.toLowerCase()
+            const isTrim = m.transparent || (m.opacity ?? 1) < 1 ||
+              /glass|window|light|lamp|chrome|mirror|tyre|tire/.test(name)
+            if (!isTrim && !this._bodyPaintMaterials.includes(m)) this._bodyPaintMaterials.push(m)
+          }
+        })
+        this.setBodyColor(this._bodyColor)
       } else {
         console.warn('base.glb contains no meshes — keeping placeholder body')
       }

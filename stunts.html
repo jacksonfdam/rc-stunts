@@ -31,6 +31,14 @@
         border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 8px; cursor: pointer;
       }
       #panel .hint { margin-top: 8px; font-size: 11px; color: #64748b; }
+      #panel .section-label { margin-top: 12px; font-size: 11px; font-weight: 700;
+        letter-spacing: 1px; text-transform: uppercase; color: #94a3b8; }
+      #car-colors { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; align-items: center; }
+      #car-colors .swatch { width: 22px; height: 22px; border-radius: 6px; cursor: pointer;
+        border: 2px solid rgba(255,255,255,0.25); }
+      #car-colors .swatch.active { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.35); }
+      #car-colors input[type="color"] { width: 26px; height: 26px; padding: 0; border: none;
+        background: none; cursor: pointer; }
 
       #speed {
         position: fixed; bottom: 16px; right: 20px; z-index: 10;
@@ -88,7 +96,9 @@
       <select id="track-select" title="Pick a bundled community track"></select>
       <label for="trk-file">Load .TRK from disk…</label>
       <input id="trk-file" type="file" accept=".trk,.TRK" />
-      <div class="hint">WASD / arrows to drive · Shift boost · Space jump · R respawn</div>
+      <div class="section-label">Car color</div>
+      <div id="car-colors"></div>
+      <div class="hint">WASD / arrows to drive · Shift boost · Space jump · R respawn · C cockpit</div>
     </div>
 
     <div id="timer" class="idle">

@@ -322,6 +322,43 @@ document.getElementById('trk-file').addEventListener('change', async (event) => 
   loadTrack(TrackFile.parse(buffer), file.name)
 })
 
+// --- Car colour --------------------------------------------------------------
+const CAR_COLORS = [
+  0xef4444, 0x2563eb, 0x16a34a, 0xf59e0b, 0xdb2777,
+  0x7c3aed, 0x0891b2, 0xe11d48, 0x111827, 0xf8fafc,
+]
+const carColorsEl = document.getElementById('car-colors')
+let activeSwatch = null
+
+for (const color of CAR_COLORS) {
+  const s = document.createElement('div')
+  s.className = 'swatch'
+  s.style.background = `#${color.toString(16).padStart(6, '0')}`
+  s.addEventListener('click', () => {
+    vehicle.setBodyColor(color)
+    if (activeSwatch) activeSwatch.classList.remove('active')
+    activeSwatch = s
+    s.classList.add('active')
+    customColor.value = `#${color.toString(16).padStart(6, '0')}`
+  })
+  carColorsEl.append(s)
+  if (color === 0xef4444) {
+    s.classList.add('active')
+    activeSwatch = s
+  }
+}
+
+const customColor = document.createElement('input')
+customColor.type = 'color'
+customColor.value = '#ef4444'
+customColor.title = 'Custom colour'
+customColor.addEventListener('input', () => {
+  vehicle.setBodyColor(parseInt(customColor.value.slice(1), 16))
+  if (activeSwatch) activeSwatch.classList.remove('active')
+  activeSwatch = null
+})
+carColorsEl.append(customColor)
+
 // --- Chase camera ------------------------------------------------------------
 
 const cameraOffset = new THREE.Vector3(0, 7, -13)
