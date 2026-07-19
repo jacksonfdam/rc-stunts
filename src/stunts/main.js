@@ -708,14 +708,29 @@ buildSwatches(document.getElementById('menu-colors'))
 // --- Car & driver selection --------------------------------------------------
 // A few tuning presets ("cars") that change engine/top speed live, plus flavour
 // drivers (cosmetic until AI opponents exist).
+// The original Stunts (1990) roster. `bonus` is the game's car-bonus coefficient
+// (higher = harder/slower cars give more score). Tuning is by class (F1/proto
+// fastest → trucks slowest). Models reuse our GLBs as visual placeholders until
+// the original car models are dropped in. RC Buggy stays first as the default so
+// the initial load (base.glb) doesn't race a model swap.
 const CARS = [
-  { name: 'RC Buggy', url: baseCarUrl, engineForce: 1400, cruiseSpeedKmh: 90, maxSpeedKmh: 140, rotY: 0 },
-  { name: 'Ford Mustang', url: mustangUrl, engineForce: 1650, cruiseSpeedKmh: 110, maxSpeedKmh: 172, rotY: 0 },
-  { name: 'Nissan GT-R', url: gtrUrl, engineForce: 1750, cruiseSpeedKmh: 122, maxSpeedKmh: 188, rotY: 0 },
-  { name: 'Chevrolet Camaro', url: camaroUrl, engineForce: 1620, cruiseSpeedKmh: 108, maxSpeedKmh: 170, rotY: 0 },
-  { name: 'Ferrari BR20', url: ferrariUrl, engineForce: 1820, cruiseSpeedKmh: 126, maxSpeedKmh: 195, rotY: 0 },
-  { name: 'BMW Z4', url: z4Url, engineForce: 1600, cruiseSpeedKmh: 110, maxSpeedKmh: 174, rotY: 0 },
-  { name: 'Nissan Silvia S15', url: silviaUrl, engineForce: 1560, cruiseSpeedKmh: 106, maxSpeedKmh: 166, rotY: 0 },
+  { name: 'RC Buggy', url: baseCarUrl, bonus: null, engineForce: 1400, cruiseSpeedKmh: 90, maxSpeedKmh: 140 },
+  { name: 'Acura NSX', url: gtrUrl, bonus: 4, engineForce: 1750, cruiseSpeedKmh: 120, maxSpeedKmh: 190 },
+  { name: 'Audi Quattro', url: silviaUrl, bonus: 21, engineForce: 1600, cruiseSpeedKmh: 105, maxSpeedKmh: 165 },
+  { name: 'Chevrolet Corvette ZR1', url: camaroUrl, bonus: 6, engineForce: 1760, cruiseSpeedKmh: 121, maxSpeedKmh: 192 },
+  { name: 'Chevrolet Silverado', url: baseCarUrl, bonus: 32, engineForce: 1450, cruiseSpeedKmh: 85, maxSpeedKmh: 130 },
+  { name: 'DAF Siluro Turbo', url: z4Url, bonus: 21, engineForce: 1850, cruiseSpeedKmh: 130, maxSpeedKmh: 210 },
+  { name: 'Ferrari GTO', url: ferrariUrl, bonus: 10, engineForce: 1770, cruiseSpeedKmh: 122, maxSpeedKmh: 194 },
+  { name: 'Ferrari Testarossa', url: ferrariUrl, bonus: 24, engineForce: 1790, cruiseSpeedKmh: 124, maxSpeedKmh: 198 },
+  { name: 'Jaguar XJR9 IMSA', url: gtrUrl, bonus: 3, engineForce: 1860, cruiseSpeedKmh: 133, maxSpeedKmh: 214 },
+  { name: 'Lamborghini Countach', url: ferrariUrl, bonus: 14, engineForce: 1790, cruiseSpeedKmh: 124, maxSpeedKmh: 198 },
+  { name: 'Lamborghini LM002', url: baseCarUrl, bonus: 36, engineForce: 1500, cruiseSpeedKmh: 88, maxSpeedKmh: 135 },
+  { name: 'Lancia Delta Integrale', url: silviaUrl, bonus: 15, engineForce: 1620, cruiseSpeedKmh: 108, maxSpeedKmh: 168 },
+  { name: 'Melange XGT-88', url: z4Url, bonus: 4, engineForce: 1850, cruiseSpeedKmh: 130, maxSpeedKmh: 210 },
+  { name: 'Porsche 962 IMSA', url: gtrUrl, bonus: 4, engineForce: 1860, cruiseSpeedKmh: 133, maxSpeedKmh: 214 },
+  { name: 'Porsche Carrera 4', url: z4Url, bonus: 22, engineForce: 1700, cruiseSpeedKmh: 115, maxSpeedKmh: 180 },
+  { name: 'Porsche March Indy', url: baseCarUrl, bonus: -28, engineForce: 1950, cruiseSpeedKmh: 145, maxSpeedKmh: 230 },
+  { name: 'Williams Renault FW12', url: baseCarUrl, bonus: -12, engineForce: 1980, cruiseSpeedKmh: 148, maxSpeedKmh: 235 },
 ]
 const DRIVERS = [
   { name: 'Skid Vicious', bio: 'Fearless and fast — takes every jump flat out.' },
@@ -756,7 +771,8 @@ function buildCarDriverPickers() {
   const showCar = (i, swapModel) => {
     const c = CARS[i]
     applyCar(c, swapModel)
-    carStats.textContent = `Top ${c.maxSpeedKmh} km/h · engine ${c.engineForce}`
+    const bonus = c.bonus == null ? '' : ` · bonus ${c.bonus > 0 ? '+' : ''}${c.bonus}%`
+    carStats.textContent = `Top ${c.maxSpeedKmh} km/h${bonus}`
   }
   // Init: tuning only — the Vehicle already loads the default (RC Buggy) model.
   carSel.addEventListener('change', (e) => showCar(+e.target.value, true))
