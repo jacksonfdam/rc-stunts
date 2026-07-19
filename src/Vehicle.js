@@ -673,11 +673,9 @@ export class Vehicle {
       const root = this.wheelVisualRoots[i]
       root.clear()
       if (on) {
-        const w = this._makeSimpleWheel()
-        // Tuck the wheel inward (toward the car centre) so it doesn't stick out
-        // past a sleek body. Left wheels are i even, right wheels i odd.
-        w.position.x = (i % 2 === 0 ? 1 : -1) * WHEEL_RADIUS * 1.1
-        root.add(w)
+        // Wheel placement (track/wheelbase) is handled per-car via
+        // wheelModelParams in _installBodyModel, so no per-mesh offset here.
+        root.add(this._makeSimpleWheel())
       } else if (this._rcWheels[i]) {
         root.add(this._rcWheels[i])
       }
@@ -718,7 +716,7 @@ export class Vehicle {
    * re-collects paint materials, and re-applies the current colour. Used both for
    * the initial model and for switching cars at runtime.
    */
-  async setBodyModel(url) {
+  async setBodyModel(url, { fitWheels = false } = {}) {
     let gltf
     try {
       gltf = await new GLTFLoader().loadAsync(url)
@@ -738,10 +736,10 @@ export class Vehicle {
       console.warn('car model has no meshes', url)
       return
     }
-    this._installBodyModel(gltf.scene)
+    this._installBodyModel(gltf.scene, fitWheels)
   }
 
-  _installBodyModel(scene) {
+  _installBodyModel(scene, fitWheels) {
     // Remove the previous body (fitted model or the placeholder group).
     if (this._bodyModelHolder) {
       this._bodyModelHolder.removeFromParent()
@@ -762,10 +760,35 @@ export class Vehicle {
     // Fit the model's longest horizontal dimension to the chassis length, so it
     // works whether the model's length runs along X or Z.
     const modelLength = Math.max(size.x, size.z) || 1
-    holder.scale.setScalar(CHASSIS_SIZE.z / modelLength)
+    const scl = CHASSIS_SIZE.z / modelLength
+    holder.scale.setScalar(scl)
     this.bodyGroup.add(holder)
     this._bodyModelHolder = holder
     this._bodyModelFitScale = holder.scale.x
+
+    // Fit the wheels and body ride-height to THIS model's dimensions so wheels
+    // sit at the car's corners (models face +Z; length ≈ CHASSIS_SIZE.z).
+    const wp = this.wheelModelParams
+    if (fitWheels) {
+      const fitW = size.x * scl // fitted body width
+      const fitL = size.z * scl // fitted body length
+      const fitH = size.y * scl // fitted body height
+      const trackHalf = clamp(fitW * 0.42, 0.45, WHEEL_CONNECTION.x)
+      const wbHalf = clamp(fitL * 0.36, 0.9, WHEEL_CONNECTION.z)
+      wp.frontOffsetX = 0
+      wp.backOffsetX = 0
+      wp.frontTrackOffset = trackHalf - WHEEL_CONNECTION.x
+      wp.backTrackOffset = trackHalf - WHEEL_CONNECTION.x
+      wp.frontOffsetZ = wbHalf - WHEEL_CONNECTION.z
+      wp.backOffsetZ = WHEEL_CONNECTION.z - wbHalf
+      wp.frontOffsetY = 0
+      wp.backOffsetY = 0
+      // Drop the body so its underside sits just above the wheels.
+      this.bodyModelParams.offsetY = -Math.max(0, fitH * 0.5 - WHEEL_RADIUS)
+    } else {
+      Object.assign(wp, DEFAULT_WHEEL_MODEL_PARAMS)
+      this.bodyModelParams.offsetY = 0
+    }
     this.applyBodyModelParams()
 
     // Re-collect paint materials (placeholder base + this model's paint; skip

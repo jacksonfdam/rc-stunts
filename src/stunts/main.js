@@ -609,16 +609,16 @@ function applyCar(car, swapModel) {
   vehicle.params.cruiseSpeedKmh = car.cruiseSpeedKmh
   vehicle.params.maxSpeedKmh = car.maxSpeedKmh
   if (swapModel && car.url) {
+    const fullCar = car.url !== baseCarUrl
     vehicle.bodyModelParams.rotationY = car.rotY ?? 0
-    // Drop full-car bodies down so they sit on the wheels instead of hovering
-    // above them (the RC buggy is modelled centred, so it keeps offset 0).
-    vehicle.bodyModelParams.offsetY = car.url === baseCarUrl ? 0 : car.offsetY ?? -1.1
-    vehicle.setBodyModel(car.url)
-    // The low-poly car GLBs are body shells with no wheels, so always keep the
-    // raycast wheel visuals; use slim car wheels for them and the chunky RC
-    // tyres only for the buggy.
+    // setBodyModel fits the wheels (track/wheelbase) and ride height to the
+    // model for full cars; the RC buggy keeps its default layout.
+    vehicle.setBodyModel(car.url, { fitWheels: fullCar })
+    // The low-poly car GLBs are body shells with no wheels — always keep the
+    // raycast wheel visuals; slim car wheels for full cars, chunky RC tyres for
+    // the buggy.
     vehicle.setWheelsVisible(true)
-    vehicle.setSimpleWheels(car.url !== baseCarUrl)
+    vehicle.setSimpleWheels(fullCar)
   }
 }
 
