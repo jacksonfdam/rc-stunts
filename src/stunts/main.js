@@ -65,6 +65,46 @@ physicsWorld.defaultContactMaterial.friction = 0.3
 
 const vehicle = new Vehicle(scene, physicsWorld)
 
+// --- Run timer ---------------------------------------------------------------
+// A stopwatch that starts the moment the car first moves and resets on respawn
+// (R) or when a new track loads, so you can time a run.
+const timerEl = document.getElementById('timer')
+const timerValue = document.getElementById('timer-value')
+let runTime = 0
+let timing = false
+
+function resetTimer() {
+  runTime = 0
+  timing = false
+  timerEl.classList.add('idle')
+  timerValue.textContent = '0:00.000'
+}
+
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  const ms = Math.floor((seconds * 1000) % 1000)
+  return `${m}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`
+}
+
+function updateTimer(delta, driving) {
+  // Start on the player's first throttle input (not spawn drift), then keep
+  // running even while coasting until reset.
+  if (!timing && driving) {
+    timing = true
+    timerEl.classList.remove('idle')
+  }
+  if (timing) {
+    runTime += delta
+    timerValue.textContent = formatTime(runTime)
+  }
+}
+
+// R respawns the car (handled inside Vehicle); mirror it here to reset the clock.
+window.addEventListener('keydown', (event) => {
+  if (event.code === 'KeyR') resetTimer()
+})
+
 // --- Track -------------------------------------------------------------------
 
 let track = null
@@ -91,6 +131,7 @@ function loadTrack(trackFile, name) {
   document.getElementById('track-name').textContent = name
   document.getElementById('horizon-name').textContent = trackFile.horizonName
   document.getElementById('tile-count').textContent = countDrivable(trackFile)
+  resetTimer()
 }
 
 loadTrack(createDemoTrackFile(), 'demo loop')
@@ -229,6 +270,9 @@ function tick() {
   sun.target.updateMatrixWorld()
 
   speedValue.textContent = Math.round(vehicle.speedKmh)
+  const driving =
+    vehicle.input.forward || vehicle.input.backward || Math.abs(vehicle.input.throttleAxis) > 0.05
+  updateTimer(delta, driving)
 
   renderer.render(scene, camera)
   requestAnimationFrame(tick)
