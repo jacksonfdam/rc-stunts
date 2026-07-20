@@ -1,17 +1,18 @@
 # Raycast RC Car — with a Stunts (1990) web port
 
-Play the live demo: <https://raycast-rc-car.netlify.app/>
-
 [![Raycast vehicle demo](src/assets/demo.jpg)](https://raycast-rc-car.netlify.app/)
 
-Interactive arcade RC car sample built with [three.js](https://threejs.org) and
-[cannon-es](https://github.com/pmndrs/cannon-es). The car uses a
-`CANNON.RaycastVehicle` chassis with GLB visuals, a GLB driving level,
-post-processing effects, mobile, desktop, and browser Gamepad API controls,
-plus a live tuning panel.
+I loved the [Raycast RC Car demo](https://raycast-rc-car.netlify.app/) by
+[icurtis1](https://github.com/icurtis1/raycast-vehicle) and decided to build a
+small **web port of [Stunts (1990)](https://en.wikipedia.org/wiki/Stunts_(video_game))**
+on top of it.
 
-On top of that engine there is a second, standalone entry: a **web port of
-[Stunts (1990)](https://en.wikipedia.org/wiki/Stunts_(video_game))**. It parses
+The base is an interactive arcade RC car built with [three.js](https://threejs.org)
+and [cannon-es](https://github.com/pmndrs/cannon-es): a `CANNON.RaycastVehicle`
+chassis with GLB visuals, a GLB driving level, post-processing effects, mobile,
+desktop, and browser Gamepad API controls, plus a live tuning panel.
+
+The Stunts port is a second, standalone entry that reuses that engine. It parses
 the original `.TRK` track files, rebuilds each track as drivable 3D geometry
 (ramps, elevated bridges, loops, corners), and lets you race an AI opponent
 through the classic car and driver roster.
