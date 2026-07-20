@@ -4,21 +4,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-Requires Node.js 20+. There is no test suite, linter, or `vite.config.*` — configuration is entirely defaults.
+Requires Node.js 20+. There is no test suite or linter. The only config is
+`vite.config.js`, which declares the **multipage build** (two HTML entries —
+see below); everything else is Vite defaults.
 
 ```bash
 npm install
 npm run dev      # Vite dev server at http://localhost:5173
-npm run build    # production build to dist/
+npm run build    # production build to dist/ (both pages)
 npm run preview  # serve the built dist/
 ```
 
-Verifying changes means driving the car in the browser (`npm run dev`); there are no automated tests to run.
+Two pages are served:
+- `/` (`index.html`) — the arcade RC playground.
+- `/stunts.html` — the Stunts (1990) web port.
+
+Verifying changes means driving the car in the browser (`npm run dev`); there
+are no automated tests to run.
 
 ## Architecture
 
 An arcade RC-car playground: a `three.js` scene rendered on top of a `cannon-es`
-`RaycastVehicle` physics simulation. Three source files, wired together in `main.js`.
+`RaycastVehicle` physics simulation, plus a web port of Stunts (1990) built on
+the same engine. Two independent entry points (`index.html` → `src/main.js`,
+`stunts.html` → `src/stunts/main.js`) share the vehicle/level engine
+(`Vehicle.js`, `World.js`).
 
 ### The two-representation model
 
@@ -44,6 +54,21 @@ render rate (e.g. 120 Hz) differs from the fixed physics step.
 - **`src/World.js`** — the level: loads `rc-level.glb` twice (once for
   rendering, once to generate `CANNON.Trimesh` colliders from every mesh), plus
   hemisphere + directional (sun) lighting and shadow setup.
+- **`src/stunts/`** — the Stunts (1990) web port (independent of `World.js`,
+  reuses `Vehicle.js`):
+  - **`main.js`** — its own composition root and game loop: scene/sky/horizon,
+    car + driver selection (16-car roster with bonus coefficients), the AI
+    opponent ghost car + race position, procedural engine sound, camera view
+    cycling (chase/hood/cockpit), run timer, and results screen.
+  - **`TrackFile.js`** — binary `.TRK` parser (the original file format) →
+    a grid of element byte-ids.
+  - **`StuntsTrack.js`** — turns a parsed `.TRK` into drivable 3D geometry and
+    `CANNON.Trimesh` colliders per tile (roads, ramps, elevated bridges,
+    neighbour-derived curved corners, loops with a stick-to-surface assist),
+    plus start/finish line and the opponent's lap route.
+  - **`trackElements.js`** — the authoritative element table mapping `.TRK`
+    byte-ids to track pieces (ids ≥ 0x80 are scenery, not road).
+  - **`tracks/`** — 84 original `.TRK` files, resolved via `import.meta.glob`.
 
 ### The game loop (`main.js` `tick()`)
 
