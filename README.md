@@ -33,8 +33,8 @@ npm run dev
 
 Then open:
 
-- <http://localhost:5173/> — the arcade RC playground (`index.html`)
-- <http://localhost:5173/stunts.html> — the Stunts web port
+- <http://localhost:5173/> — the Stunts web port (`index.html`)
+- <http://localhost:5173/play.html> — the arcade RC playground
 
 Both pages share the same `src/` engine (`Vehicle.js`, `World.js`) but have
 independent main scripts, so the build is multipage — see `vite.config.js`.
@@ -68,7 +68,7 @@ is hidden on touch devices.
 | A (bottom button) | Jump |
 | B / right bumper | Boost |
 
-## The Stunts web port (`stunts.html`)
+## The Stunts web port (`index.html`)
 
 A recreation of the classic *Stunts / 4D Sports Driving* experience on top of
 the same raycast-vehicle engine.
@@ -154,9 +154,9 @@ Defaults live in `DEFAULT_PARAMS` at the top of `src/Vehicle.js`. Highlights:
 ## Project structure
 
 ```
-index.html            Arcade playground: HUD, mobile controls, styles
-stunts.html           Stunts web port: menu, results screen, styles
-vite.config.js        Multipage build (index.html + stunts.html)
+index.html            Stunts web port: menu, results screen, styles (served at /)
+play.html             Arcade playground: HUD, mobile controls, styles
+vite.config.js        Multipage build (index.html + play.html)
 public/og-image.jpg   Social share preview image
 src/main.js           Playground: renderer, camera, post, GUI, input, game loop
 src/Vehicle.js        Car physics, controls, visuals, tire marks (shared)

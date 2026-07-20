@@ -16,8 +16,8 @@ npm run preview  # serve the built dist/
 ```
 
 Two pages are served:
-- `/` (`index.html`) — the arcade RC playground.
-- `/stunts.html` — the Stunts (1990) web port.
+- `/` (`index.html`) — the Stunts (1990) web port (the deployed landing page).
+- `/play.html` — the arcade RC playground.
 
 Verifying changes means driving the car in the browser (`npm run dev`); there
 are no automated tests to run.
@@ -26,8 +26,8 @@ are no automated tests to run.
 
 An arcade RC-car playground: a `three.js` scene rendered on top of a `cannon-es`
 `RaycastVehicle` physics simulation, plus a web port of Stunts (1990) built on
-the same engine. Two independent entry points (`index.html` → `src/main.js`,
-`stunts.html` → `src/stunts/main.js`) share the vehicle/level engine
+the same engine. Two independent entry points (`play.html` → `src/main.js`,
+`index.html` → `src/stunts/main.js`) share the vehicle/level engine
 (`Vehicle.js`, `World.js`).
 
 ### The two-representation model
