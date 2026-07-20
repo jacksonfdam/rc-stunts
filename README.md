@@ -1,4 +1,4 @@
-# Raycast RC Car
+# Raycast RC Car — with a Stunts (1990) web port
 
 Play the live demo: <https://raycast-rc-car.netlify.app/>
 
@@ -9,6 +9,12 @@ Interactive arcade RC car sample built with [three.js](https://threejs.org) and
 `CANNON.RaycastVehicle` chassis with GLB visuals, a GLB driving level,
 post-processing effects, mobile, desktop, and browser Gamepad API controls,
 plus a live tuning panel.
+
+On top of that engine there is a second, standalone entry: a **web port of
+[Stunts (1990)](https://en.wikipedia.org/wiki/Stunts_(video_game))**. It parses
+the original `.TRK` track files, rebuilds each track as drivable 3D geometry
+(ramps, elevated bridges, loops, corners), and lets you race an AI opponent
+through the classic car and driver roster.
 
 The physics approach is inspired by [Bruno Simon's portfolio](https://bruno-simon.com/)
 and [swift502/Sketchbook](https://github.com/swift502/Sketchbook): each wheel is
@@ -24,7 +30,13 @@ npm install
 npm run dev
 ```
 
-Then open http://localhost:5173.
+Then open:
+
+- <http://localhost:5173/> — the arcade RC playground (`index.html`)
+- <http://localhost:5173/stunts.html> — the Stunts web port
+
+Both pages share the same `src/` engine (`Vehicle.js`, `World.js`) but have
+independent main scripts, so the build is multipage — see `vite.config.js`.
 
 ## Controls
 
@@ -36,7 +48,7 @@ Then open http://localhost:5173.
 | Shift | Boost |
 | Space | Jump / handbrake |
 | R | Respawn |
-| . (period) | Toggle the tuning panel |
+| . (period) | Toggle the tuning panel (playground) |
 | Mouse drag | Orbit the camera (scroll to zoom) |
 
 ### Touch (phones/tablets)
@@ -55,6 +67,36 @@ is hidden on touch devices.
 | A (bottom button) | Jump |
 | B / right bumper | Boost |
 
+## The Stunts web port (`stunts.html`)
+
+A recreation of the classic *Stunts / 4D Sports Driving* experience on top of
+the same raycast-vehicle engine.
+
+- **Original tracks.** 84 `.TRK` files ship under `src/stunts/tracks/`
+  (the named originals — `bernies`, `cherris`, `helens`, `joes`, `skids`,
+  `default` — plus the `r4k*` set). `TrackFile.js` parses the binary format and
+  `StuntsTrack.js` rebuilds it into 3D: flat roads, inclined ramps, raised
+  elevated roads on pillars, curved corners derived from neighbouring tiles, and
+  drivable loops with a stick-to-surface assist.
+- **The car roster.** The full 16-car Stunts line-up (Acura NSX, Ferrari GTO,
+  Lamborghini Countach, Porsche 962 IMSA, Williams Renault FW12, …) plus an RC
+  Buggy, each with its own engine force and top speed and the game's original
+  car-bonus coefficient. Cars are visualised with low-poly GLB models you can
+  recolour.
+- **Drivers.** The classic opponents (Skid Vicious, Bernie Rubber, Herr Otto
+  Partz, Joe Stallin, Cherry Chassis) with their bios.
+- **AI opponent.** A ghost car traces an ordered lap route through the track and
+  you race it — with car-to-car collision, a live 1st/2nd position readout, and
+  a wrong-way warning.
+- **Cameras.** Cycle chase → hood → cockpit views.
+- **Feel & feedback.** Procedural engine sound (no audio assets), a start/finish
+  line, a run timer, and a results screen (lap time, top speed, average speed,
+  jumps) that freezes the scene when the race ends.
+- **Scenery.** A gradient sky dome, distant mountain horizon rings, and fog that
+  blends the ground edge into the skyline.
+
+You can also load your own `.TRK` file from the menu.
+
 ## How it works
 
 - The chassis is a single `CANNON.Box` rigid body, with small corner spheres so
@@ -64,9 +106,11 @@ is hidden on touch devices.
   as a spring/damper suspension and applies engine, brake, and friction forces
   at the contact point. There are no wheel collider bodies, which is what makes
   this technique stable and fast.
-- The level (`src/assets/rc-level.glb`) is used for both rendering and physics:
-  every mesh in it becomes an exact `CANNON.Trimesh` collider, so ramps and
-  curved surfaces work without hand-made collision boxes.
+- The playground level (`src/assets/rc-level.glb`) is used for both rendering
+  and physics: every mesh in it becomes an exact `CANNON.Trimesh` collider, so
+  ramps and curved surfaces work without hand-made collision boxes. In the
+  Stunts port the track geometry is generated procedurally per tile from the
+  parsed `.TRK` and collided the same way.
 - Three.js meshes are purely visual and get synced from the physics bodies each
   frame (`Vehicle._syncVisuals`, `World.update`).
 - The chase camera smoothly interpolates toward a point behind the car using
@@ -109,12 +153,19 @@ Defaults live in `DEFAULT_PARAMS` at the top of `src/Vehicle.js`. Highlights:
 ## Project structure
 
 ```
-index.html          HUD, mobile controls, and styles
-public/og-image.jpg Social share preview image
-src/main.js         Renderer, camera, post-processing, GUI, input, game loop
-src/Vehicle.js      Car physics, controls, visuals, tire marks
-src/World.js        Level loading, trimesh colliders, lights and shadows
-src/assets/         Car and level GLBs + reflection texture
+index.html            Arcade playground: HUD, mobile controls, styles
+stunts.html           Stunts web port: menu, results screen, styles
+vite.config.js        Multipage build (index.html + stunts.html)
+public/og-image.jpg   Social share preview image
+src/main.js           Playground: renderer, camera, post, GUI, input, game loop
+src/Vehicle.js        Car physics, controls, visuals, tire marks (shared)
+src/World.js          Playground level: trimesh colliders, lights, shadows (shared)
+src/stunts/main.js          Stunts port: scene, cars, drivers, AI opponent, race loop
+src/stunts/TrackFile.js     Binary .TRK parser
+src/stunts/StuntsTrack.js   .TRK → drivable 3D geometry + physics colliders
+src/stunts/trackElements.js Track-element (byte id → piece) table
+src/stunts/tracks/          84 original .TRK files
+src/assets/           Car and level GLBs + reflection texture
 ```
 
 ## Gotchas worth knowing (cannon-es)
