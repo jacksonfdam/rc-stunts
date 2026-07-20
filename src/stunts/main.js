@@ -5,6 +5,7 @@ import { createPostProcessing, DEFAULT_POST_PARAMS } from '../engine/postProcess
 import { createPhysicsDebug } from '../engine/physicsDebug.js'
 import { createShadowController } from '../engine/shadow.js'
 import { createGamepadInput } from '../engine/gamepad.js'
+import { createCameraController } from './camera.js'
 import {
   buildVehicleSections,
   buildPostSection,
@@ -881,7 +882,7 @@ function refreshMenuPreview() {
 }
 
 function openMenu() {
-  if (cameraMode === 'cockpit') setCameraMode('chase')
+  if (cameraController.mode === 'cockpit') cameraController.setMode('chase')
   menuEl.classList.remove('hidden')
   openMenuBtn.classList.add('hidden')
   panelEl.classList.add('hidden')
@@ -911,64 +912,15 @@ menuTrack.addEventListener('change', (event) => {
 menu.driveButton.addEventListener('click', startDriving)
 openMenuBtn.addEventListener('click', openMenu)
 
-// --- Chase camera ------------------------------------------------------------
+// --- Camera (chase / hood / cockpit) -----------------------------------------
 
-const cameraOffset = new THREE.Vector3(0, 7, -13)
-const lookOffset = new THREE.Vector3(0, 2, 6)
-const desiredPosition = new THREE.Vector3()
-const desiredTarget = new THREE.Vector3()
-const currentTarget = new THREE.Vector3()
-currentTarget.copy(vehicle.group.position)
-
-// Hood/bumper view: a low, close chase.
-const hoodOffset = new THREE.Vector3(0, 3, -5.5)
-const hoodLook = new THREE.Vector3(0, 2, 10)
-
-function updateCamera(delta) {
-  const chassis = vehicle.group
-  const cockpitless = cameraMode === 'hood'
-  const posOff = cockpitless ? hoodOffset : cameraOffset
-  const lookOff = cockpitless ? hoodLook : lookOffset
-  const minLift = cockpitless ? 1.2 : 3
-  desiredPosition.copy(posOff).applyQuaternion(chassis.quaternion).add(chassis.position)
-  desiredPosition.y = Math.max(desiredPosition.y, chassis.position.y + minLift)
-  desiredTarget.copy(lookOff).applyQuaternion(chassis.quaternion).add(chassis.position)
-
-  const posLerp = cockpitless ? 12 : 6
-  camera.position.lerp(desiredPosition, 1 - Math.exp(-posLerp * delta))
-  currentTarget.lerp(desiredTarget, 1 - Math.exp(-10 * delta))
-  camera.lookAt(currentTarget)
-}
-
-// --- Camera views (press C or the View button to cycle) ----------------------
-
-const CAMERA_VIEWS = ['chase', 'hood', 'cockpit']
-const VIEW_LABELS = { chase: 'Chase', hood: 'Hood', cockpit: 'Cockpit' }
-let cameraMode = 'chase'
-const viewBtn = document.getElementById('view-btn')
-const eyeOffset = new THREE.Vector3(0, 1.5, 0.0) // driver's eyeline inside the car
-const cockpitLookOffset = new THREE.Vector3(0, 1.1, 10)
-const cockpitEye = new THREE.Vector3()
-const cockpitTarget = new THREE.Vector3()
-
-function setCameraMode(mode) {
-  cameraMode = mode
-  const cockpit = mode === 'cockpit'
-  cockpitOverlay.setVisible(cockpit)
-  vehicle.group.visible = !cockpit // don't render the car body from inside it
-  camera.fov = cockpit ? 74 : 60
-  camera.updateProjectionMatrix()
-  if (viewBtn) viewBtn.textContent = `◉ ${VIEW_LABELS[mode]}`
-}
-
-function cycleCameraMode() {
-  // No view switching while the start menu (bird's-eye) is up — otherwise the
-  // top-down preview stays on and just overlays the cockpit frame.
-  if (!menuEl.classList.contains('hidden')) return
-  const i = CAMERA_VIEWS.indexOf(cameraMode)
-  setCameraMode(CAMERA_VIEWS[(i + 1) % CAMERA_VIEWS.length])
-}
-if (viewBtn) viewBtn.addEventListener('click', cycleCameraMode)
+const cameraController = createCameraController({
+  camera,
+  vehicle,
+  cockpitOverlay,
+  viewButton: document.getElementById('view-btn'),
+  isMenuOpen: () => !menuEl.classList.contains('hidden'),
+})
 
 // --- Wrong-way detection -----------------------------------------------------
 // Compare the car's heading with the route's local forward direction; warn when
@@ -1001,20 +953,13 @@ function updateWrongWay() {
   hud.setWrongWay(wrong)
 }
 
-function updateCockpit(delta) {
-  const chassis = vehicle.group
-  cockpitEye.copy(eyeOffset).applyQuaternion(chassis.quaternion).add(chassis.position)
-  cockpitTarget.copy(cockpitLookOffset).applyQuaternion(chassis.quaternion).add(chassis.position)
-  camera.position.lerp(cockpitEye, 1 - Math.exp(-35 * delta))
-  camera.lookAt(cockpitTarget)
-}
 
 // --- Windshield crack on a hard crash ----------------------------------------
 
 let prevSpeed = 0
 
 window.addEventListener('keydown', (event) => {
-  if (event.code === 'KeyC') cycleCameraMode()
+  if (event.code === 'KeyC') cameraController.cycle()
   if (event.code === 'KeyR') crash.clear()
 })
 
@@ -1030,7 +975,7 @@ function updateTopView() {
 window.__stunts = {
   scene, camera, renderer, vehicle, debug, loadTrack,
   forceCrack() { crash.trigger(9999) },
-  setCameraMode,
+  setCameraMode: cameraController.setMode,
   get track() { return track },
 }
 
@@ -1169,8 +1114,7 @@ function tick() {
   if (debug.topView) updateTopView()
   else if (debug.freeze) {
     // manual/frozen camera — leave it where it is
-  } else if (cameraMode === 'cockpit') updateCockpit(delta)
-  else updateCamera(delta)
+  } else cameraController.update(delta)
   // Fog would hide the whole track from the high top-down camera.
   scene.fog = debug.topView ? null : sceneFog
 
