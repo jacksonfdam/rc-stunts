@@ -10,6 +10,7 @@ import {
   buildModelSections,
   buildTireMarksSection,
 } from '../ui/tuning/sections.js'
+import { createColorSwatches } from '../ui/molecules/ColorSwatches.js'
 
 import {
   Vehicle,
@@ -526,7 +527,7 @@ function finishLap(lapSeconds) {
   } catch {
     times = []
   }
-  times.push({ t: lapSeconds, c: carColor })
+  times.push({ t: lapSeconds, c: carColors.color })
   times.sort((a, b) => a.t - b.t)
   times = times.slice(0, 8)
   try {
@@ -753,39 +754,12 @@ document.getElementById('trk-file').addEventListener('change', async (event) => 
 })
 
 // --- Car colour --------------------------------------------------------------
-const CAR_COLORS = [
-  0xef4444, 0x2563eb, 0x16a34a, 0xf59e0b, 0xdb2777,
-  0x7c3aed, 0x0891b2, 0xe11d48, 0x111827, 0xf8fafc,
-]
-let carColor = 0xef4444
-const swatchEls = [] // all swatches across both palettes, for active-state sync
-
-function setCarColor(color, sourceEl) {
-  carColor = color
-  vehicle.setBodyColor(color)
-  for (const s of swatchEls) s.classList.toggle('active', s === sourceEl)
-}
-
-function buildSwatches(container) {
-  for (const color of CAR_COLORS) {
-    const s = document.createElement('div')
-    s.className = 'swatch'
-    s.style.background = `#${color.toString(16).padStart(6, '0')}`
-    s.addEventListener('click', () => setCarColor(color, s))
-    if (color === carColor) s.classList.add('active')
-    swatchEls.push(s)
-    container.append(s)
-  }
-  const custom = document.createElement('input')
-  custom.type = 'color'
-  custom.value = `#${carColor.toString(16).padStart(6, '0')}`
-  custom.title = 'Custom colour'
-  custom.addEventListener('input', () => setCarColor(parseInt(custom.value.slice(1), 16), null))
-  container.append(custom)
-}
-
-buildSwatches(document.getElementById('car-colors'))
-buildSwatches(document.getElementById('menu-colors'))
+const carColors = createColorSwatches({
+  initial: 0xef4444,
+  onChange: (color) => vehicle.setBodyColor(color),
+})
+carColors.mount(document.getElementById('car-colors'))
+carColors.mount(document.getElementById('menu-colors'))
 
 // --- Car & driver selection --------------------------------------------------
 // A few tuning presets ("cars") that change engine/top speed live, plus flavour
