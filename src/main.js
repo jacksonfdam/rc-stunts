@@ -5,6 +5,7 @@ import { createPostProcessing, DEFAULT_POST_PARAMS } from './engine/postProcessi
 import { createPhysicsDebug } from './engine/physicsDebug.js'
 import { createShadowController } from './engine/shadow.js'
 import { createGamepadInput, shapeAxis } from './engine/gamepad.js'
+import { createOrbitCamera } from './camera.js'
 import {
   buildVehicleSections,
   buildPostSection,
@@ -152,149 +153,7 @@ physicsDebug.setVisible(vehicle.debugParams.physics)
 
 // --- Chase camera ------------------------------------------------------------
 
-const cameraOffset = new THREE.Vector3(0, 5.2, -7.4) // higher angle so more of the car is visible
-const cameraLookOffset = new THREE.Vector3(0, 1.2, 3.2) // look slightly ahead
-const airborneCameraOffset = new THREE.Vector3(0, 8.2, -12.5)
-const airborneCameraLookOffset = new THREE.Vector3(0, 0.6, 9.5)
-const cameraOrbitPivotOffset = new THREE.Vector3(0, 1.2, 0) // center of the car for mouse orbit
-const cameraOrbitLocalOffset = new THREE.Vector3()
-const blendedCameraOffset = new THREE.Vector3()
-const blendedCameraLookOffset = new THREE.Vector3()
-const cameraPivot = new THREE.Vector3()
-const normalTarget = new THREE.Vector3()
-const orbitTarget = new THREE.Vector3()
-const desiredPosition = new THREE.Vector3()
-const desiredTarget = new THREE.Vector3()
-const currentTarget = new THREE.Vector3()
-const orbitOffset = new THREE.Vector3()
-const localXAxis = new THREE.Vector3(1, 0, 0)
-const localYAxis = new THREE.Vector3(0, 1, 0)
-const CAMERA_ZOOM_MIN = 0.4
-const CAMERA_ZOOM_MAX = 1.5
-let airborneCameraBlend = 0
-const cameraOrbit = {
-  yaw: 0,
-  pitch: 0,
-  targetYaw: 0,
-  targetPitch: 0,
-  zoom: 1,
-  targetZoom: 1,
-  dragging: false,
-  lastX: 0,
-  lastY: 0,
-}
-
-function normalizeAngleRadians(angle) {
-  return THREE.MathUtils.euclideanModulo(angle + Math.PI, Math.PI * 2) - Math.PI
-}
-
-renderer.domElement.addEventListener('pointerdown', (event) => {
-  if (event.button !== 0) return
-  cameraOrbit.dragging = true
-  cameraOrbit.lastX = event.clientX
-  cameraOrbit.lastY = event.clientY
-  renderer.domElement.setPointerCapture(event.pointerId)
-})
-
-renderer.domElement.addEventListener('pointermove', (event) => {
-  if (!cameraOrbit.dragging) return
-
-  const dx = event.clientX - cameraOrbit.lastX
-  const dy = event.clientY - cameraOrbit.lastY
-  cameraOrbit.lastX = event.clientX
-  cameraOrbit.lastY = event.clientY
-
-  // Low sensitivity plus smoothing in updateCamera makes the orbit easier to control.
-  cameraOrbit.targetYaw -= dx * 0.0035
-  cameraOrbit.targetPitch = THREE.MathUtils.clamp(cameraOrbit.targetPitch - dy * 0.0028, -0.5, 0.35)
-})
-
-renderer.domElement.addEventListener('wheel', (event) => {
-  event.preventDefault()
-  cameraOrbit.targetZoom = THREE.MathUtils.clamp(
-    cameraOrbit.targetZoom + event.deltaY * 0.001,
-    CAMERA_ZOOM_MIN,
-    CAMERA_ZOOM_MAX
-  )
-}, { passive: false })
-
-function stopCameraDrag(event) {
-  cameraOrbit.dragging = false
-  if (renderer.domElement.hasPointerCapture(event.pointerId)) {
-    renderer.domElement.releasePointerCapture(event.pointerId)
-  }
-}
-
-renderer.domElement.addEventListener('pointerup', stopCameraDrag)
-renderer.domElement.addEventListener('pointercancel', stopCameraDrag)
-
-function updateCamera(delta) {
-  const chassis = vehicle.group
-  const accelerating =
-    vehicle.input.forward ||
-    vehicle.input.backward ||
-    Math.abs(vehicle.input.throttleAxis) > 0.05
-  if (accelerating) {
-    cameraOrbit.dragging = false
-    cameraOrbit.yaw = normalizeAngleRadians(cameraOrbit.yaw)
-    cameraOrbit.targetYaw = normalizeAngleRadians(cameraOrbit.targetYaw)
-    const resetLerp = 1 - Math.exp(-8 * delta)
-    cameraOrbit.targetYaw = THREE.MathUtils.lerp(cameraOrbit.targetYaw, 0, resetLerp)
-    cameraOrbit.targetPitch = THREE.MathUtils.lerp(cameraOrbit.targetPitch, 0, resetLerp)
-  }
-
-  const orbitLerp = 1 - Math.exp(-14 * delta)
-  cameraOrbit.yaw = THREE.MathUtils.lerp(cameraOrbit.yaw, cameraOrbit.targetYaw, orbitLerp)
-  cameraOrbit.pitch = THREE.MathUtils.lerp(cameraOrbit.pitch, cameraOrbit.targetPitch, orbitLerp)
-  cameraOrbit.zoom = THREE.MathUtils.lerp(cameraOrbit.zoom, cameraOrbit.targetZoom, orbitLerp)
-
-  const grounded = vehicle.raycastVehicle.wheelInfos.some((wheel) => wheel.isInContact)
-  const upwardSpeed = Math.max(0, vehicle.chassisBody.velocity.y)
-  const airborneTarget = grounded ? 0 : THREE.MathUtils.clamp(0.45 + upwardSpeed / 12, 0.45, 1)
-  airborneCameraBlend = THREE.MathUtils.lerp(
-    airborneCameraBlend,
-    airborneTarget,
-    1 - Math.exp(-(grounded ? 5 : 3) * delta)
-  )
-
-  blendedCameraLookOffset
-    .copy(cameraLookOffset)
-    .lerp(airborneCameraLookOffset, airborneCameraBlend)
-  normalTarget.copy(blendedCameraLookOffset).applyQuaternion(chassis.quaternion).add(chassis.position)
-  orbitTarget.copy(cameraOrbitPivotOffset).applyQuaternion(chassis.quaternion).add(chassis.position)
-  const orbitAmount = THREE.MathUtils.clamp(
-    Math.abs(cameraOrbit.yaw) * 1.5 + Math.abs(cameraOrbit.pitch) * 2 + (cameraOrbit.dragging ? 1 : 0),
-    0,
-    1
-  )
-
-  cameraPivot.copy(orbitTarget)
-  blendedCameraOffset.copy(cameraOffset).lerp(airborneCameraOffset, airborneCameraBlend)
-  // Subtle dolly-out while boosting: paired with the FOV increase it sells speed
-  const boostPullBack = 1 + 0.08 * cameraBoostBlend
-  cameraOrbitLocalOffset
-    .copy(blendedCameraOffset)
-    .sub(cameraOrbitPivotOffset)
-    .multiplyScalar(cameraOrbit.zoom * boostPullBack)
-  orbitOffset
-    .copy(cameraOrbitLocalOffset)
-    .applyAxisAngle(localXAxis, cameraOrbit.pitch)
-    .applyAxisAngle(localYAxis, cameraOrbit.yaw)
-
-  desiredPosition.copy(orbitOffset).applyQuaternion(chassis.quaternion).add(cameraPivot)
-  // Keep the camera from clipping under the ground when the car flips
-  desiredPosition.y = Math.max(desiredPosition.y, chassis.position.y + 1.5, 1.2)
-
-  desiredTarget.copy(normalTarget).lerp(orbitTarget, orbitAmount)
-
-  const positionLerp = 1 - Math.exp(-6 * delta)
-  const targetLerp = 1 - Math.exp(-10 * delta)
-  camera.position.lerp(desiredPosition, positionLerp)
-  currentTarget.lerp(desiredTarget, targetLerp)
-  camera.lookAt(currentTarget)
-}
-
-currentTarget.copy(vehicle.group.position)
+const orbitCamera = createOrbitCamera({ renderer, camera, vehicle })
 
 // --- Transporter --------------------------------------------------------------
 
@@ -720,7 +579,7 @@ function tick() {
   gamepadInput.poll()
   vehicle.update(delta)
   world.update()
-  updateCamera(delta)
+  orbitCamera.update(delta, cameraBoostBlend)
   updateTransporter(delta)
   physicsDebug.update()
 
