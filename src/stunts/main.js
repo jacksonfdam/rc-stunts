@@ -15,6 +15,15 @@ import { createResultsScreen } from '../ui/organisms/ResultsScreen.js'
 import { createHud } from '../ui/organisms/Hud.js'
 import { createMenu } from '../ui/organisms/Menu.js'
 
+import '../ui/styles/tokens.css'
+import '../ui/styles/base.css'
+import '../ui/styles/controls.css'
+import '../ui/styles/panel.css'
+import '../ui/styles/hud.css'
+import '../ui/styles/menu.css'
+import '../ui/styles/cockpit.css'
+import '../ui/styles/results.css'
+
 import {
   Vehicle,
   DEFAULT_PARAMS,
