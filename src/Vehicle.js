@@ -318,6 +318,11 @@ export class Vehicle {
 
     // --- Chassis: a simple stylized car out of boxes ---
     const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.35, metalness: 0.15 })
+    // Paint materials that setBodyColor() recolours (placeholder body + GLB body
+    // paint; glass/lights/trim are excluded by heuristic in _loadModels).
+    this._placeholderBodyMaterial = bodyMaterial
+    this._bodyPaintMaterials = [bodyMaterial]
+    this._bodyColor = 0xef4444
     const darkMaterial = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.6 })
     const glassMaterial = new THREE.MeshStandardMaterial({ color: 0x93c5fd, roughness: 0.1, metalness: 0.4 })
 
@@ -368,6 +373,8 @@ export class Vehicle {
 
     this.wheelMeshes = []
     this.wheelVisualRoots = []
+    this._rcWheels = [] // loaded RC wheel GLBs, per corner (for toggling)
+    this._simpleWheels = false // slim car wheels vs the RC buggy's GLB wheels
     for (let i = 0; i < 4; i++) {
       const wheel = new THREE.Group()
       const visualRoot = new THREE.Group()
@@ -645,6 +652,165 @@ export class Vehicle {
     }
   }
 
+  /** Show/hide the raycast wheel visuals. */
+  setWheelsVisible(visible) {
+    if (!this.wheelVisualRoots) return
+    for (const root of this.wheelVisualRoots) root.visible = visible
+  }
+
+  /**
+   * Swap the wheel look: slim clean car wheels for full-car models, or the RC
+   * buggy's chunky GLB tyres. Radius matches WHEEL_RADIUS so they stay grounded;
+   * only the width/style changes.
+   */
+  setSimpleWheels(on) {
+    if (this._simpleWheels === on || !this.wheelVisualRoots) {
+      this._simpleWheels = on
+      return
+    }
+    this._simpleWheels = on
+    for (let i = 0; i < this.wheelVisualRoots.length; i++) {
+      const root = this.wheelVisualRoots[i]
+      root.clear()
+      if (on) {
+        // Wheel placement (track/wheelbase) is handled per-car via
+        // wheelModelParams in _installBodyModel, so no per-mesh offset here.
+        root.add(this._makeSimpleWheel())
+      } else if (this._rcWheels[i]) {
+        root.add(this._rcWheels[i])
+      }
+    }
+    this.applyWheelModelParams()
+  }
+
+  _makeSimpleWheel() {
+    const g = new THREE.Group()
+    const tire = new THREE.Mesh(
+      new THREE.CylinderGeometry(WHEEL_RADIUS, WHEEL_RADIUS, WHEEL_RADIUS * 0.5, 18),
+      new THREE.MeshStandardMaterial({ color: 0x0d0f14, roughness: 0.85 })
+    )
+    tire.rotation.z = Math.PI / 2 // axle along X (the roll axis)
+    tire.castShadow = true
+    g.add(tire)
+    const rim = new THREE.Mesh(
+      new THREE.CylinderGeometry(WHEEL_RADIUS * 0.5, WHEEL_RADIUS * 0.5, WHEEL_RADIUS * 0.54, 10),
+      new THREE.MeshStandardMaterial({ color: 0xb0b6c0, metalness: 0.6, roughness: 0.35 })
+    )
+    rim.rotation.z = Math.PI / 2
+    g.add(rim)
+    return g
+  }
+
+  /** Recolour the car's paint (placeholder body + GLB body paint materials). */
+  setBodyColor(color) {
+    this._bodyColor = color
+    for (const material of this._bodyPaintMaterials) {
+      material.color.set(color)
+      material.needsUpdate = true
+    }
+  }
+
+  /**
+   * Load a GLB and install it as the car body, replacing the current body model
+   * (or the placeholder). Auto-centres, fits its length to the physics chassis,
+   * re-collects paint materials, and re-applies the current colour. Used both for
+   * the initial model and for switching cars at runtime.
+   */
+  async setBodyModel(url, { fitWheels = false } = {}) {
+    let gltf
+    try {
+      gltf = await new GLTFLoader().loadAsync(url)
+    } catch (error) {
+      console.warn('Could not load car model', url, error)
+      return
+    }
+    let hasMesh = false
+    gltf.scene.traverse((c) => {
+      if (c.isMesh) {
+        hasMesh = true
+        c.castShadow = true
+        c.receiveShadow = true
+      }
+    })
+    if (!hasMesh) {
+      console.warn('car model has no meshes', url)
+      return
+    }
+    this._installBodyModel(gltf.scene, fitWheels)
+  }
+
+  _installBodyModel(scene, fitWheels) {
+    // Remove the previous body (fitted model or the placeholder group).
+    if (this._bodyModelHolder) {
+      this._bodyModelHolder.removeFromParent()
+      this._bodyModelHolder.traverse((c) => {
+        if (c.isMesh) c.geometry?.dispose()
+      })
+    } else if (this.placeholderBody) {
+      this.placeholderBody.removeFromParent()
+    }
+
+    // Centre on origin and scale so its length matches the physics chassis.
+    const box = new THREE.Box3().setFromObject(scene)
+    const size = box.getSize(new THREE.Vector3())
+    const center = box.getCenter(new THREE.Vector3())
+    scene.position.sub(center)
+    const holder = new THREE.Group()
+    holder.add(scene)
+    // Fit the model's longest horizontal dimension to the chassis length, so it
+    // works whether the model's length runs along X or Z.
+    const modelLength = Math.max(size.x, size.z) || 1
+    const scl = CHASSIS_SIZE.z / modelLength
+    holder.scale.setScalar(scl)
+    this.bodyGroup.add(holder)
+    this._bodyModelHolder = holder
+    this._bodyModelFitScale = holder.scale.x
+
+    // Fit the wheels and body ride-height to THIS model's dimensions so wheels
+    // sit at the car's corners (models face +Z; length ≈ CHASSIS_SIZE.z).
+    const wp = this.wheelModelParams
+    if (fitWheels) {
+      const fitW = size.x * scl // fitted body width
+      const fitL = size.z * scl // fitted body length
+      const fitH = size.y * scl // fitted body height
+      const trackHalf = clamp(fitW * 0.42, 0.45, WHEEL_CONNECTION.x)
+      const wbHalf = clamp(fitL * 0.36, 0.9, WHEEL_CONNECTION.z)
+      wp.frontOffsetX = 0
+      wp.backOffsetX = 0
+      wp.frontTrackOffset = trackHalf - WHEEL_CONNECTION.x
+      wp.backTrackOffset = trackHalf - WHEEL_CONNECTION.x
+      wp.frontOffsetZ = wbHalf - WHEEL_CONNECTION.z
+      wp.backOffsetZ = WHEEL_CONNECTION.z - wbHalf
+      wp.frontOffsetY = 0
+      wp.backOffsetY = 0
+      // Drop the body so its underside sits just above the wheels.
+      this.bodyModelParams.offsetY = -Math.max(0, fitH * 0.5 - WHEEL_RADIUS)
+    } else {
+      Object.assign(wp, DEFAULT_WHEEL_MODEL_PARAMS)
+      this.bodyModelParams.offsetY = 0
+    }
+    this.applyBodyModelParams()
+
+    // Re-collect paint materials (placeholder base + this model's paint; skip
+    // glass/lights/trim/wheels).
+    this._bodyPaintMaterials = [this._placeholderBodyMaterial]
+    holder.traverse((child) => {
+      if (!child.isMesh || !child.material) return
+      const mats = Array.isArray(child.material) ? child.material : [child.material]
+      for (const m of mats) {
+        if (!this._glbMaterials.includes(m)) this._glbMaterials.push(m)
+        const name = `${m.name} ${child.name}`.toLowerCase()
+        const isTrim =
+          m.transparent ||
+          (m.opacity ?? 1) < 1 ||
+          /glass|window|light|lamp|chrome|mirror|tyre|tire|wheel|rim|tin/.test(name)
+        if (!isTrim && !this._bodyPaintMaterials.includes(m)) this._bodyPaintMaterials.push(m)
+      }
+    })
+    this.applyReflectionParams()
+    this.setBodyColor(this._bodyColor)
+  }
+
   /** Push the GUI transform tweaks to the loaded body model (no-op until it loads). */
   applyBodyModelParams() {
     const holder = this._bodyModelHolder
@@ -701,25 +867,8 @@ export class Vehicle {
       return holder
     }
 
-    // --- Chassis body ---
-    try {
-      const bodyRoot = await loadScene(baseModelUrl)
-      if (bodyRoot) {
-        const size = new THREE.Box3().setFromObject(bodyRoot).getSize(new THREE.Vector3())
-        // Scale so the model's length matches the physics chassis length
-        const fitted = fitModel(bodyRoot, size.z, CHASSIS_SIZE.z)
-        this.placeholderBody.removeFromParent()
-        this.bodyGroup.add(fitted)
-        // Remember the auto-fit scale so the GUI multiplier stacks on top
-        this._bodyModelHolder = fitted
-        this._bodyModelFitScale = fitted.scale.x
-        this.applyBodyModelParams()
-      } else {
-        console.warn('base.glb contains no meshes — keeping placeholder body')
-      }
-    } catch (error) {
-      console.warn('Could not load base.glb — keeping placeholder body', error)
-    }
+    // --- Chassis body --- (shares the swap path used for switching cars)
+    await this.setBodyModel(baseModelUrl)
 
     // --- Wheels (same order as the physics wheels: FL, FR, BL, BR) ---
     const wheelUrls = [wheelFrontLeftUrl, wheelFrontRightUrl, wheelBackLeftUrl, wheelBackRightUrl]
@@ -734,8 +883,11 @@ export class Vehicle {
         // The tire is round in y/z (the x axis is the axle), so the larger of
         // the two is the wheel diameter
         const fitted = fitModel(wheelRoot, Math.max(size.y, size.z), WHEEL_RADIUS * 2)
-        this.wheelVisualRoots[i].clear()
-        this.wheelVisualRoots[i].add(fitted)
+        this._rcWheels[i] = fitted
+        if (!this._simpleWheels) {
+          this.wheelVisualRoots[i].clear()
+          this.wheelVisualRoots[i].add(fitted)
+        }
         this.applyWheelModelParams()
       } catch (error) {
         console.warn(`Could not load wheel model ${i} — keeping placeholder`, error)
@@ -961,13 +1113,18 @@ export class Vehicle {
           this._tmpVec.cross(UP, this._tmpVec2)
           this._tmpVec2.scale(p.mass * 55 * speedFade, this._tmpVec2)
           body.torque.vadd(this._tmpVec2, body.torque)
-        }
 
-        body.quaternion.conjugate(this._tmpQuat)
-        this._tmpQuat.vmult(body.angularVelocity, this._tmpVec)
-        this._tmpVec.x *= 0.88
-        this._tmpVec.z *= 0.88
-        body.quaternion.vmult(this._tmpVec, body.angularVelocity)
+          // Bleed off pitch/roll spin so a slow tumble settles instead of
+          // flipping. Gated by the same speed fade: at loop/stunt speeds the
+          // car must be free to rotate all the way through a vertical loop or
+          // corkscrew, so this damping only applies when moving slowly.
+          body.quaternion.conjugate(this._tmpQuat)
+          this._tmpQuat.vmult(body.angularVelocity, this._tmpVec)
+          const damp = 1 - 0.12 * speedFade
+          this._tmpVec.x *= damp
+          this._tmpVec.z *= damp
+          body.quaternion.vmult(this._tmpVec, body.angularVelocity)
+        }
       }
     }
   }
