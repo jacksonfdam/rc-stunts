@@ -4,6 +4,7 @@ import GUI from 'lil-gui'
 import { createPostProcessing, DEFAULT_POST_PARAMS } from './engine/postProcessing.js'
 import { createPhysicsDebug } from './engine/physicsDebug.js'
 import { createShadowController } from './engine/shadow.js'
+import { createGamepadInput, shapeAxis } from './engine/gamepad.js'
 import {
   buildVehicleSections,
   buildPostSection,
@@ -598,15 +599,10 @@ const mobileBoost = document.querySelector('#mobile-boost')
 const mobileReset = document.querySelector('#mobile-reset')
 let mobileJoystickActive = false
 
-function shapeMobileAxis(value) {
-  const sign = Math.sign(value)
-  return sign * Math.pow(Math.abs(value), 1.7)
-}
-
 function setMobileJoystickInput(x, y) {
   const deadzone = 0.2
-  const steer = Math.abs(x) < deadzone ? 0 : shapeMobileAxis(x) * 0.76
-  const throttle = Math.abs(y) < deadzone ? 0 : shapeMobileAxis(y) * 0.9
+  const steer = Math.abs(x) < deadzone ? 0 : shapeAxis(x) * 0.76
+  const throttle = Math.abs(y) < deadzone ? 0 : shapeAxis(y) * 0.9
 
   vehicle.input.steerAxis = steer
   vehicle.input.throttleAxis = throttle
@@ -695,50 +691,9 @@ if (mobileReset) {
 
 // --- Gamepad controls ----------------------------------------------------------
 
-let gamepadJumpWasPressed = false
-
-function gamepadButtonPressed(gamepad, index, threshold = 0.5) {
-  const button = gamepad.buttons[index]
-  return Boolean(button?.pressed || button?.value > threshold)
-}
-
-function gamepadButtonValue(gamepad, index) {
-  return gamepad.buttons[index]?.value ?? 0
-}
-
-function updateGamepadControls() {
-  const gamepads = navigator.getGamepads?.() ?? []
-  const gamepad = gamepads.find(Boolean)
-  if (!gamepad) {
-    if (!mobileJoystickActive) {
-      vehicle.input.steerAxis = 0
-      vehicle.input.throttleAxis = 0
-    }
-    vehicle.input.gamepadBoost = false
-    gamepadJumpWasPressed = false
-    return
-  }
-
-  const dpadX = (gamepadButtonPressed(gamepad, 15) ? 1 : 0) - (gamepadButtonPressed(gamepad, 14) ? 1 : 0)
-  const dpadY = (gamepadButtonPressed(gamepad, 12) ? 1 : 0) - (gamepadButtonPressed(gamepad, 13) ? 1 : 0)
-  const steer = Math.abs(gamepad.axes[0] ?? 0) > 0.12 ? shapeMobileAxis(gamepad.axes[0]) : dpadX
-  const gas = gamepadButtonValue(gamepad, 7)
-  const reverse = gamepadButtonValue(gamepad, 6)
-  const triggerThrottle = gas - reverse
-  const throttle = Math.abs(triggerThrottle) > 0.05 ? triggerThrottle : dpadY
-
-  if (!mobileJoystickActive) {
-    vehicle.input.steerAxis = steer
-    vehicle.input.throttleAxis = throttle
-  }
-  vehicle.input.gamepadBoost =
-    gamepadButtonPressed(gamepad, 1) ||
-    gamepadButtonPressed(gamepad, 5)
-
-  const jumpPressed = gamepadButtonPressed(gamepad, 0)
-  if (jumpPressed && !gamepadJumpWasPressed) vehicle.requestJump()
-  gamepadJumpWasPressed = jumpPressed
-}
+const gamepadInput = createGamepadInput(vehicle, {
+  isExternalInputActive: () => mobileJoystickActive,
+})
 
 // --- Loop ----------------------------------------------------------------------
 
@@ -762,7 +717,7 @@ function tick() {
 
   physicsWorld.step(FIXED_STEP, delta, 3)
 
-  updateGamepadControls()
+  gamepadInput.poll()
   vehicle.update(delta)
   world.update()
   updateCamera(delta)
