@@ -6,6 +6,7 @@ import { createPhysicsDebug } from './engine/physicsDebug.js'
 import { createShadowController } from './engine/shadow.js'
 import { createGamepadInput, shapeAxis } from './engine/gamepad.js'
 import { createOrbitCamera } from './camera.js'
+import { createPlaygroundScene } from './scene.js'
 import {
   buildVehicleSections,
   buildPostSection,
@@ -25,73 +26,8 @@ import houseReflectionUrl from './assets/reflection.jpg?url'
 
 // --- Renderer & scene -------------------------------------------------------
 
-const container = document.getElementById('app')
-
-// MSAA on the default framebuffer only applies when post-processing is off;
-// the composer path gets its own multisampled render targets below.
-const renderer = new THREE.WebGLRenderer({ antialias: true })
-renderer.setSize(window.innerWidth, window.innerHeight)
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-renderer.shadowMap.enabled = true
-// Plain PCF so sun.shadow.radius (the "Shadow softness" slider) applies
-renderer.shadowMap.type = THREE.PCFShadowMap
-container.appendChild(renderer.domElement)
-
-const scene = new THREE.Scene()
-
-function createSoftOutdoorEnvironmentMaps(renderer) {
-  const makeFace = (topColor, bottomColor) => {
-    const canvas = document.createElement('canvas')
-    canvas.width = 64
-    canvas.height = 64
-    const context = canvas.getContext('2d')
-    const gradient = context.createLinearGradient(0, 0, 0, canvas.height)
-    gradient.addColorStop(0, topColor)
-    gradient.addColorStop(0.55, '#9fc2d4')
-    gradient.addColorStop(1, bottomColor)
-    context.fillStyle = gradient
-    context.fillRect(0, 0, canvas.width, canvas.height)
-    return canvas
-  }
-
-  const cubeTexture = new THREE.CubeTexture([
-    makeFace('#6687a0', '#586446'), // +x
-    makeFace('#6c8ca4', '#515d3f'), // -x
-    makeFace('#8daec5', '#708b9c'), // +y
-    makeFace('#4f5a3d', '#303629'), // -y
-    makeFace('#6689a1', '#586443'), // +z
-    makeFace('#607f96', '#4f5b3d'), // -z
-  ])
-  cubeTexture.colorSpace = THREE.SRGBColorSpace
-  cubeTexture.needsUpdate = true
-
-  const pmremGenerator = new THREE.PMREMGenerator(renderer)
-  const reflectionMap = pmremGenerator.fromCubemap(cubeTexture).texture
-  pmremGenerator.dispose()
-  return {
-    backgroundMap: cubeTexture,
-    reflectionMap,
-  }
-}
-
-async function createImageReflectionMap(renderer, url) {
-  const texture = await new THREE.TextureLoader().loadAsync(url)
-  texture.colorSpace = THREE.SRGBColorSpace
-  texture.mapping = THREE.EquirectangularReflectionMapping
-
-  const pmremGenerator = new THREE.PMREMGenerator(renderer)
-  const reflectionMap = pmremGenerator.fromEquirectangular(texture).texture
-  pmremGenerator.dispose()
-  texture.dispose()
-  return reflectionMap
-}
-
-// Generated reflection map for GLB materials only. Keeping it off
-// scene.environment prevents the whole world from looking over-lit/washed out.
-const { backgroundMap: outdoorBackgroundMap, reflectionMap: glbReflectionMap } =
-  createSoftOutdoorEnvironmentMaps(renderer)
-const houseReflectionMap = await createImageReflectionMap(renderer, houseReflectionUrl)
-scene.background = outdoorBackgroundMap
+const { renderer, scene, glbReflectionMap, houseReflectionMap } =
+  await createPlaygroundScene(document.getElementById('app'), houseReflectionUrl)
 
 const DEFAULT_CAMERA_PARAMS = {
   fov: 60,
