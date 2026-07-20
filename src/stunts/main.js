@@ -1,7 +1,20 @@
 import * as THREE from 'three'
 import * as CANNON from 'cannon-es'
+import GUI from 'lil-gui'
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js'
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 
-import { Vehicle } from '../Vehicle.js'
+import {
+  Vehicle,
+  DEFAULT_PARAMS,
+  DEFAULT_BODY_MODEL_PARAMS,
+  DEFAULT_WHEEL_MODEL_PARAMS,
+  DEFAULT_REFLECTION_PARAMS,
+  DEFAULT_TIRE_MARK_PARAMS,
+} from '../Vehicle.js'
 import { TrackFile, createDemoTrackFile } from './TrackFile.js'
 import { describeElement } from './trackElements.js'
 import { StuntsTrack, TILE } from './StuntsTrack.js'
@@ -123,10 +136,198 @@ sun.shadow.normalBias = 0.03
 scene.add(sun)
 scene.add(sun.target)
 
+// --- Post-processing ---------------------------------------------------------
+// Same chain and defaults as the arcade playground (src/main.js): a color-grade
+// pass (grade + vignette + chromatic aberration + film noise + boost wind
+// streaks) plus optional GTAO. The Stunts camera's far plane (4000) is kept.
+
+const DEFAULT_CAMERA_PARAMS = {
+  fov: 60,
+  far: 4000,
+}
+const cameraParams = { ...DEFAULT_CAMERA_PARAMS }
+let cameraBoostBlend = 0
+
+const DEFAULT_POST_PARAMS = {
+  enabled: true,
+  aoEnabled: false,
+  aoIntensity: 1.5,
+  aoRadius: 2,
+  aoScreenSpaceRadius: false,
+  exposure: 1,
+  contrast: 1,
+  brightness: 0,
+  saturation: 1.1,
+  vignetteStrength: 1,
+  vignetteRadius: 0.24,
+  noiseAmount: 0,
+  chromaticAberration: 0.0014,
+  windLinesStrength: 0.35,
+  windLinesMinSpeedKmh: 110,
+}
+const BOOST_POST_PARAMS = {
+  vignetteStrength: 1.35,
+  chromaticAberration: 0.012,
+}
+const postParams = { ...DEFAULT_POST_PARAMS }
+let postBoostBlend = 0
+let windLinesBlend = 0
+renderer.toneMappingExposure = postParams.exposure
+
+const colorGradeShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+    time: { value: 0 },
+    contrast: { value: postParams.contrast },
+    brightness: { value: postParams.brightness },
+    saturation: { value: postParams.saturation },
+    vignetteStrength: { value: postParams.vignetteStrength },
+    vignetteRadius: { value: postParams.vignetteRadius },
+    noiseAmount: { value: postParams.noiseAmount },
+    chromaticAberration: { value: postParams.chromaticAberration },
+    windLines: { value: 0 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform vec2 resolution;
+    uniform float time;
+    uniform float contrast;
+    uniform float brightness;
+    uniform float saturation;
+    uniform float vignetteStrength;
+    uniform float vignetteRadius;
+    uniform float noiseAmount;
+    uniform float chromaticAberration;
+    uniform float windLines;
+    varying vec2 vUv;
+
+    float random(vec2 st) {
+      return fract(sin(dot(st.xy, vec2(12.9898, 78.233)) + time) * 43758.5453123);
+    }
+
+    float hash(float n) {
+      return fract(sin(n) * 43758.5453123);
+    }
+
+    // Thin radial streaks near the screen edges, racing toward the center.
+    float windStreaks(vec2 uv) {
+      vec2 dir = (uv - 0.5) * vec2(resolution.x / resolution.y, 1.0);
+      float radius = length(dir);
+      float angle = atan(dir.y, dir.x);
+
+      const float LINE_COUNT = 90.0;
+      float slot = angle / 6.2831853 * LINE_COUNT;
+      float bin = floor(slot);
+
+      float seed = hash(bin * 7.13 + floor(time * 9.0) * 131.7);
+      float streakOn = step(0.82, seed);
+
+      float linePos = abs(fract(slot) - 0.5);
+      float lineMask = smoothstep(0.10, 0.02, linePos);
+
+      float lifetime = fract(time * 9.0);
+      float head = mix(0.42, 1.05, lifetime * (0.5 + 0.5 * hash(bin * 3.7)));
+      float trail = smoothstep(head - 0.28, head - 0.05, radius) * smoothstep(head + 0.08, head, radius);
+
+      float edgeMask = smoothstep(0.38, 0.75, radius);
+
+      return streakOn * lineMask * trail * edgeMask;
+    }
+
+    void main() {
+      vec2 center = vec2(0.5);
+      vec2 direction = vUv - center;
+      vec2 aberrationOffset = direction * chromaticAberration;
+
+      vec4 color = texture2D(tDiffuse, vUv);
+      color.r = texture2D(tDiffuse, vUv + aberrationOffset).r;
+      color.b = texture2D(tDiffuse, vUv - aberrationOffset).b;
+
+      color.rgb += brightness;
+      color.rgb = (color.rgb - 0.5) * contrast + 0.5;
+
+      float luminance = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+      color.rgb = mix(vec3(luminance), color.rgb, saturation);
+
+      float dist = distance(vUv, center);
+      float vignette = smoothstep(vignetteRadius, 0.98, dist);
+      color.rgb *= 1.0 - vignette * vignetteStrength;
+
+      float noise = random(vUv * resolution) - 0.5;
+      color.rgb += noise * noiseAmount;
+
+      if (windLines > 0.001) {
+        color.rgb += windStreaks(vUv) * windLines;
+      }
+
+      gl_FragColor = vec4(color.rgb, color.a);
+    }
+  `,
+}
+
+const composer = new EffectComposer(renderer)
+composer.renderTarget1.samples = 4
+composer.renderTarget2.samples = 4
+const renderPass = new RenderPass(scene, camera)
+const gtaoPass = new GTAOPass(scene, camera, window.innerWidth, window.innerHeight)
+gtaoPass.output = GTAOPass.OUTPUT.Default
+const colorGradePass = new ShaderPass(colorGradeShader)
+const outputPass = new OutputPass()
+composer.addPass(renderPass)
+composer.addPass(gtaoPass)
+composer.addPass(colorGradePass)
+composer.addPass(outputPass)
+
+function applyCameraParams(fovOverride = cameraParams.fov) {
+  camera.fov = fovOverride
+  camera.far = cameraParams.far
+  camera.updateProjectionMatrix()
+}
+
+function applyPostParams() {
+  const boostedVignette = THREE.MathUtils.lerp(
+    postParams.vignetteStrength,
+    BOOST_POST_PARAMS.vignetteStrength,
+    postBoostBlend
+  )
+  const boostedChromatic = THREE.MathUtils.lerp(
+    postParams.chromaticAberration,
+    BOOST_POST_PARAMS.chromaticAberration,
+    postBoostBlend
+  )
+
+  renderer.toneMappingExposure = postParams.exposure
+  gtaoPass.enabled = postParams.enabled && postParams.aoEnabled
+  gtaoPass.blendIntensity = postParams.aoIntensity
+  gtaoPass.updateGtaoMaterial({
+    radius: postParams.aoRadius,
+    screenSpaceRadius: postParams.aoScreenSpaceRadius,
+  })
+  colorGradePass.enabled = postParams.enabled
+  colorGradePass.uniforms.contrast.value = postParams.contrast
+  colorGradePass.uniforms.brightness.value = postParams.brightness
+  colorGradePass.uniforms.saturation.value = postParams.saturation
+  colorGradePass.uniforms.vignetteStrength.value = boostedVignette
+  colorGradePass.uniforms.vignetteRadius.value = postParams.vignetteRadius
+  colorGradePass.uniforms.noiseAmount.value = postParams.noiseAmount
+  colorGradePass.uniforms.chromaticAberration.value = boostedChromatic
+}
+applyPostParams()
+
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight
   camera.updateProjectionMatrix()
   renderer.setSize(window.innerWidth, window.innerHeight)
+  composer.setSize(window.innerWidth, window.innerHeight)
+  colorGradePass.uniforms.resolution.value.set(window.innerWidth, window.innerHeight)
 })
 
 // --- Physics -----------------------------------------------------------------
@@ -139,6 +340,176 @@ physicsWorld.defaultContactMaterial.friction = 0.3
 // --- Vehicle -----------------------------------------------------------------
 
 const vehicle = new Vehicle(scene, physicsWorld)
+
+// --- Lighting / shadow tunables ----------------------------------------------
+// sunX/Y/Z are the sun's offset from the car (the shadow frustum follows the
+// car each frame — see tick()).
+const DEFAULT_LIGHTING_PARAMS = {
+  ambientIntensity: hemi.intensity,
+  sunIntensity: sun.intensity,
+}
+const shadowParams = {
+  sunX: 60,
+  sunY: 90,
+  sunZ: 30,
+  shadowMapSize: sun.shadow.mapSize.x,
+  shadowCameraSize: TILE * 4,
+  shadowBias: sun.shadow.bias,
+  shadowNormalBias: sun.shadow.normalBias,
+  shadowRadius: sun.shadow.radius,
+}
+const DEFAULT_SHADOW_PARAMS = { ...shadowParams }
+
+function applyShadowParams() {
+  sun.shadow.camera.left = -shadowParams.shadowCameraSize
+  sun.shadow.camera.right = shadowParams.shadowCameraSize
+  sun.shadow.camera.top = shadowParams.shadowCameraSize
+  sun.shadow.camera.bottom = -shadowParams.shadowCameraSize
+  sun.shadow.bias = shadowParams.shadowBias
+  sun.shadow.normalBias = shadowParams.shadowNormalBias
+  sun.shadow.radius = shadowParams.shadowRadius
+  sun.shadow.camera.updateProjectionMatrix()
+
+  if (sun.shadow.mapSize.x !== shadowParams.shadowMapSize) {
+    sun.shadow.mapSize.set(shadowParams.shadowMapSize, shadowParams.shadowMapSize)
+    sun.shadow.map?.dispose()
+    sun.shadow.map = null
+  }
+}
+applyShadowParams()
+
+// Wireframe overlay of every physics collider + each wheel's suspension ray.
+// Toggled from the Debug folder. Rebuilds when the body count changes (the
+// track's colliders are recreated on every loadTrack).
+function createPhysicsDebug(scene, physicsWorld, vehicle) {
+  const group = new THREE.Group()
+  group.visible = false
+  scene.add(group)
+
+  const colliderMaterial = new THREE.MeshBasicMaterial({
+    color: 0x00ffff,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.7,
+    depthTest: false,
+  })
+  const rayMaterial = new THREE.LineBasicMaterial({
+    color: 0xff00ff,
+    transparent: true,
+    opacity: 0.9,
+    depthTest: false,
+  })
+
+  const colliders = []
+  const rayLines = []
+
+  const getGeometry = (shape) => {
+    if (shape instanceof CANNON.Box) {
+      const h = shape.halfExtents
+      return new THREE.BoxGeometry(h.x * 2, h.y * 2, h.z * 2)
+    }
+    if (shape instanceof CANNON.Sphere) {
+      return new THREE.SphereGeometry(shape.radius, 16, 8)
+    }
+    if (shape instanceof CANNON.Cylinder) {
+      return new THREE.CylinderGeometry(
+        shape.radiusTop,
+        shape.radiusBottom,
+        shape.height,
+        shape.numSegments
+      )
+    }
+    if (shape instanceof CANNON.Trimesh) {
+      const geometry = new THREE.BufferGeometry()
+      geometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(new Float32Array(shape.vertices), 3)
+      )
+      geometry.setIndex(Array.from(shape.indices))
+      geometry.computeVertexNormals()
+      return geometry
+    }
+    return null
+  }
+
+  const rebuild = () => {
+    colliders.length = 0
+    rayLines.length = 0
+    group.clear()
+
+    for (const body of physicsWorld.bodies) {
+      body.shapes.forEach((shape, shapeIndex) => {
+        const geometry = getGeometry(shape)
+        if (!geometry) return
+        const mesh = new THREE.Mesh(geometry, colliderMaterial)
+        mesh.renderOrder = 1000
+        group.add(mesh)
+        colliders.push({ body, shapeIndex, mesh })
+      })
+    }
+
+    for (let i = 0; i < vehicle.raycastVehicle.wheelInfos.length; i++) {
+      const line = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+        rayMaterial
+      )
+      line.renderOrder = 1001
+      group.add(line)
+      rayLines.push(line)
+    }
+  }
+
+  const sync = () => {
+    if (!group.visible) return
+
+    colliders.forEach(({ body, shapeIndex, mesh }) => {
+      const offset = body.shapeOffsets[shapeIndex]
+      const orientation = body.shapeOrientations[shapeIndex]
+      const rotatedOffset = body.quaternion.vmult(offset)
+
+      mesh.position.set(
+        body.position.x + rotatedOffset.x,
+        body.position.y + rotatedOffset.y,
+        body.position.z + rotatedOffset.z
+      )
+      mesh.quaternion.set(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w)
+      mesh.quaternion.multiply(
+        new THREE.Quaternion(orientation.x, orientation.y, orientation.z, orientation.w)
+      )
+    })
+
+    vehicle.raycastVehicle.wheelInfos.forEach((wheel, index) => {
+      const line = rayLines[index]
+      if (!line) return
+
+      const start = wheel.chassisConnectionPointWorld
+      const end = wheel.raycastResult.hasHit
+        ? wheel.raycastResult.hitPointWorld
+        : start.vadd(wheel.directionWorld.scale(wheel.suspensionRestLength + wheel.radius))
+
+      const positions = line.geometry.attributes.position
+      positions.setXYZ(0, start.x, start.y, start.z)
+      positions.setXYZ(1, end.x, end.y, end.z)
+      positions.needsUpdate = true
+      line.geometry.computeBoundingSphere()
+    })
+  }
+
+  rebuild()
+
+  return {
+    setVisible(visible) {
+      if (visible && colliders.length !== physicsWorld.bodies.reduce((n, body) => n + body.shapes.length, 0)) {
+        rebuild()
+      }
+      group.visible = visible
+      sync()
+    },
+    update: sync,
+  }
+}
+
+const physicsDebug = createPhysicsDebug(scene, physicsWorld, vehicle)
 
 // --- AI opponent -------------------------------------------------------------
 // A ghost car that drives the track's route (see StuntsTrack._buildRoute). It's
@@ -1075,10 +1446,223 @@ window.__stunts = {
   get track() { return track },
 }
 
+// --- Tuning GUI --------------------------------------------------------------
+// Mirrors the arcade playground's panel (src/main.js). Hidden by default; press
+// "." to toggle. Groups that don't apply to the Stunts scene (environment
+// height, teleporter) are omitted.
+
+const gui = new GUI({ title: 'Vehicle Tuning' })
+const p = vehicle.params
+const rp = vehicle.reflectionParams
+const tm = vehicle.tireMarkParams
+const bm = vehicle.bodyModelParams
+const wm = vehicle.wheelModelParams
+const performanceParams = { fps: 0 }
+
+const vehicleFolder = gui.addFolder('Vehicle')
+const cameraFolder = gui.addFolder('Camera')
+const worldFolder = gui.addFolder('World')
+const effectsFolder = gui.addFolder('Effects')
+const modelsFolder = gui.addFolder('Models')
+const debugFolder = gui.addFolder('Debug')
+
+const fpsController = debugFolder.add(performanceParams, 'fps').name('FPS').listen()
+
+let guiVisible = false
+gui.domElement.style.display = 'none'
+window.addEventListener('keydown', (event) => {
+  const target = event.target
+  const isTyping = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable
+  if (event.code !== 'Period' || event.repeat || isTyping) return
+  guiVisible = !guiVisible
+  gui.domElement.style.display = guiVisible ? '' : 'none'
+  event.preventDefault()
+})
+
+cameraFolder.add(cameraParams, 'fov', 30, 100, 1).name('FOV').onChange(() => applyCameraParams())
+cameraFolder.add(cameraParams, 'far', 500, 20000, 100).name('Far clipping').onChange(() => applyCameraParams())
+
+const lightingFolder = worldFolder.addFolder('Lighting & Shadows')
+lightingFolder.close()
+lightingFolder.add(hemi, 'intensity', 0, 2, 0.01).name('Ambient light')
+lightingFolder.add(sun, 'intensity', 0, 5, 0.01).name('Sun light')
+lightingFolder.add(shadowParams, 'sunX', -100, 100, 1).name('Sun X').onChange(applyShadowParams)
+lightingFolder.add(shadowParams, 'sunY', 5, 200, 1).name('Sun Y').onChange(applyShadowParams)
+lightingFolder.add(shadowParams, 'sunZ', -100, 100, 1).name('Sun Z').onChange(applyShadowParams)
+lightingFolder
+  .add(shadowParams, 'shadowMapSize', [512, 1024, 2048, 4096])
+  .name('Shadow map')
+  .onChange((value) => {
+    shadowParams.shadowMapSize = Number(value)
+    applyShadowParams()
+  })
+lightingFolder.add(shadowParams, 'shadowCameraSize', 20, 400, 1).name('Shadow area').onChange(applyShadowParams)
+lightingFolder.add(shadowParams, 'shadowBias', -0.01, 0.01, 0.0001).name('Shadow bias').onChange(applyShadowParams)
+lightingFolder.add(shadowParams, 'shadowNormalBias', 0, 0.1, 0.001).name('Normal bias').onChange(applyShadowParams)
+lightingFolder.add(shadowParams, 'shadowRadius', 0, 10, 0.1).name('Shadow softness').onChange(applyShadowParams)
+lightingFolder.add(rp, 'glbReflectionIntensity', 0, 1, 0.01).name('GLB reflection').onChange(() => vehicle.applyReflectionParams())
+
+const postFolder = effectsFolder.addFolder('Post Processing')
+postFolder.close()
+postFolder.add(postParams, 'enabled').name('Enabled').onChange(applyPostParams)
+postFolder.add(postParams, 'aoEnabled').name('Ambient occlusion (GTAO)').onChange(applyPostParams)
+postFolder.add(postParams, 'aoIntensity', 0, 3, 0.01).name('AO intensity').onChange(applyPostParams)
+postFolder.add(postParams, 'aoRadius', 0.05, 5, 0.01).name('AO radius').onChange(applyPostParams)
+postFolder.add(postParams, 'aoScreenSpaceRadius').name('AO screen-space radius').onChange(applyPostParams)
+postFolder.add(postParams, 'exposure', 0.1, 3, 0.01).name('Exposure').onChange(applyPostParams)
+postFolder.add(postParams, 'contrast', 0, 2, 0.01).name('Contrast').onChange(applyPostParams)
+postFolder.add(postParams, 'brightness', -0.5, 0.5, 0.01).name('Brightness').onChange(applyPostParams)
+postFolder.add(postParams, 'saturation', 0, 2, 0.01).name('Saturation').onChange(applyPostParams)
+postFolder.add(postParams, 'vignetteStrength', 0, 2, 0.01).name('Vignette').onChange(applyPostParams)
+postFolder.add(postParams, 'vignetteRadius', 0.1, 1, 0.01).name('Vignette radius').onChange(applyPostParams)
+postFolder.add(postParams, 'noiseAmount', 0, 0.15, 0.001).name('Noise').onChange(applyPostParams)
+postFolder.add(postParams, 'chromaticAberration', 0, 0.02, 0.0001).name('Chromatic aberration').onChange(applyPostParams)
+postFolder.add(postParams, 'windLinesStrength', 0, 1, 0.01).name('Wind lines strength')
+postFolder.add(postParams, 'windLinesMinSpeedKmh', 0, 200, 5).name('Wind lines min speed')
+
+const bodyModelFolder = modelsFolder.addFolder('Body GLB Transform')
+bodyModelFolder.close()
+bodyModelFolder.add(bm, 'scale', 0.1, 4, 0.01).name('Scale ×').onChange(() => vehicle.applyBodyModelParams())
+bodyModelFolder.add(bm, 'offsetX', -3, 3, 0.01).name('Offset X').onChange(() => vehicle.applyBodyModelParams())
+bodyModelFolder.add(bm, 'offsetY', -3, 3, 0.01).name('Offset Y').onChange(() => vehicle.applyBodyModelParams())
+bodyModelFolder.add(bm, 'offsetZ', -3, 3, 0.01).name('Offset Z').onChange(() => vehicle.applyBodyModelParams())
+bodyModelFolder.add(bm, 'rotationY', -180, 180, 1).name('Rotate Y (°)').onChange(() => vehicle.applyBodyModelParams())
+
+const wheelModelFolder = modelsFolder.addFolder('Wheel GLB Transform')
+wheelModelFolder.close()
+wheelModelFolder.add(wm, 'frontScale', 0.1, 4, 0.01).name('Front scale ×').onChange(() => vehicle.applyWheelModelParams())
+wheelModelFolder.add(wm, 'frontTrackOffset', -1, 1, 0.01).name('Front push out/in').onChange(() => vehicle.applyWheelModelParams())
+wheelModelFolder.add(wm, 'frontOffsetX', -2, 2, 0.01).name('Front offset X').onChange(() => vehicle.applyWheelModelParams())
+wheelModelFolder.add(wm, 'frontOffsetY', -2, 2, 0.01).name('Front offset Y').onChange(() => vehicle.applyWheelModelParams())
+wheelModelFolder.add(wm, 'frontOffsetZ', -2, 2, 0.01).name('Front offset Z').onChange(() => vehicle.applyWheelModelParams())
+wheelModelFolder.add(wm, 'frontRotationY', -180, 180, 1).name('Front rotate Y (°)').onChange(() => vehicle.applyWheelModelParams())
+wheelModelFolder.add(wm, 'frontSpinDirection', { Normal: 1, Reversed: -1 }).name('Front spin')
+wheelModelFolder.add(wm, 'backScale', 0.1, 4, 0.01).name('Back scale ×').onChange(() => vehicle.applyWheelModelParams())
+wheelModelFolder.add(wm, 'backTrackOffset', -1, 1, 0.01).name('Back push out/in').onChange(() => vehicle.applyWheelModelParams())
+wheelModelFolder.add(wm, 'backOffsetX', -2, 2, 0.01).name('Back offset X').onChange(() => vehicle.applyWheelModelParams())
+wheelModelFolder.add(wm, 'backOffsetY', -2, 2, 0.01).name('Back offset Y').onChange(() => vehicle.applyWheelModelParams())
+wheelModelFolder.add(wm, 'backOffsetZ', -2, 2, 0.01).name('Back offset Z').onChange(() => vehicle.applyWheelModelParams())
+wheelModelFolder.add(wm, 'backRotationY', -180, 180, 1).name('Back rotate Y (°)').onChange(() => vehicle.applyWheelModelParams())
+wheelModelFolder.add(wm, 'backSpinDirection', { Normal: 1, Reversed: -1 }).name('Back spin')
+
+const tireMarkFolder = effectsFolder.addFolder('Tire Marks')
+tireMarkFolder.close()
+tireMarkFolder.add(tm, 'enabled').name('Enabled').onChange(() => vehicle.applyTireMarkParams())
+tireMarkFolder.add(tm, 'drawWhileMoving').name('Draw while moving')
+tireMarkFolder.add(tm, 'minSpeedKmh', 0, 120, 1).name('Min speed')
+tireMarkFolder.add(tm, 'minSteer', 0, 0.6, 0.01).name('Turn amount')
+tireMarkFolder.add(tm, 'frontWidth', 0.1, 1.2, 0.01).name('Front width')
+tireMarkFolder.add(tm, 'backWidth', 0.1, 1.2, 0.01).name('Back width')
+tireMarkFolder.add(tm, 'backSpacing', -1, 1, 0.01).name('Back spacing')
+tireMarkFolder.add(tm, 'backForwardOffset', -1, 1, 0.01).name('Back forward offset')
+tireMarkFolder.add(tm, 'opacity', 0, 1, 0.01).name('Opacity').onChange(() => vehicle.applyTireMarkParams())
+tireMarkFolder.add(tm, 'capOpacity', 0, 1, 0.01).name('Fade opacity').onChange(() => vehicle.applyTireMarkParams())
+tireMarkFolder.add(tm, 'surfaceOffset', 0, 0.2, 0.001).name('Surface offset')
+tireMarkFolder.add(tm, 'contactGraceTime', 0, 1, 0.01).name('Contact grace')
+tireMarkFolder.add(tm, 'maxPointGap', 0.5, 20, 0.1).name('Max point gap')
+tireMarkFolder.add(tm, 'fadeLength', 0.1, 3, 0.05).name('Fade length')
+tireMarkFolder.add(tm, 'maxMarks', 50, 2000, 10).name('Max marks').onChange(() => vehicle.applyTireMarkParams())
+tireMarkFolder.add({ clear: () => vehicle.clearTireMarks() }, 'clear').name('Clear marks')
+
+const engineFolder = vehicleFolder.addFolder('Engine')
+engineFolder.close()
+engineFolder.add(p, 'engineForce', 200, 4000, 50).name('Engine force')
+engineFolder.add(p, 'boostMultiplier', 1, 3, 0.1).name('Boost ×')
+engineFolder.add(p, 'cruiseSpeedKmh', 30, 200, 5).name('Top speed (km/h)')
+engineFolder.add(p, 'maxSpeedKmh', 40, 300, 5).name('Boost top speed (km/h)')
+engineFolder.add(p, 'reverseFactor', 0.1, 1, 0.05).name('Reverse power')
+
+const steerFolder = vehicleFolder.addFolder('Steering')
+steerFolder.close()
+steerFolder.add(p, 'maxSteer', 0.1, 0.9, 0.01).name('Max steer angle')
+steerFolder.add(p, 'steerSpeed', 1, 15, 0.5).name('Steer speed')
+
+const brakesFolder = vehicleFolder.addFolder('Brakes')
+brakesFolder.close()
+brakesFolder.add(p, 'brakeForce', 2, 60, 1).name('Brake force')
+brakesFolder.add(p, 'handbrakeForce', 5, 80, 1).name('Handbrake force')
+
+const suspensionFolder = vehicleFolder.addFolder('Suspension & Tires')
+suspensionFolder.close()
+suspensionFolder.add(p, 'suspensionStiffness', 10, 120, 1).name('Stiffness').onChange(() => vehicle.applyWheelParams())
+suspensionFolder.add(p, 'suspensionRestLength', 0.2, 0.9, 0.01).name('Rest length').onChange(() => vehicle.applyWheelParams())
+suspensionFolder.add(p, 'maxSuspensionTravel', 0.1, 0.7, 0.01).name('Max travel').onChange(() => vehicle.applyWheelParams())
+suspensionFolder.add(p, 'frictionSlip', 0.5, 10, 0.1).name('Grip (frictionSlip)').onChange(() => vehicle.applyWheelParams())
+suspensionFolder.add(p, 'dampingRelaxation', 1, 8, 0.1).name('Damping (rebound)').onChange(() => vehicle.applyWheelParams())
+suspensionFolder.add(p, 'dampingCompression', 1, 8, 0.1).name('Damping (compress)').onChange(() => vehicle.applyWheelParams())
+
+const chassisFolder = vehicleFolder.addFolder('Chassis')
+chassisFolder.close()
+chassisFolder.add(p, 'mass', 80, 800, 10).name('Mass (kg)').onChange(() => vehicle.applyChassisParams())
+chassisFolder.add(p, 'angularDamping', 0, 0.9, 0.01).name('Angular damping').onChange(() => vehicle.applyChassisParams())
+chassisFolder.add(p, 'inertiaScale', 1, 6, 0.1).name('Anti-flip inertia ×').onChange(() => vehicle.applyChassisParams())
+
+const assistsFolder = vehicleFolder.addFolder('Assists')
+assistsFolder.close()
+assistsFolder.add(p, 'antiWheelie').name('Anti-wheelie')
+assistsFolder.add(p, 'tiltClampAirborne', 0, 10, 0.5).name('Air tilt clamp (rad/s)')
+assistsFolder.add(p, 'uprightAssist').name('Upright assist')
+assistsFolder.add(p, 'wallSlideAssist').name('Wall slide assist')
+assistsFolder.add(p, 'wallSlideMaxSpeedKmh', 1, 40, 1).name('Wall slide max speed')
+assistsFolder.add(p, 'wallSlideStrength', 0, 14, 0.5).name('Wall slide strength')
+assistsFolder.add(p, 'cornerLiftDamping', 0.7, 1, 0.01).name('Corner-lift damping')
+assistsFolder.add(p, 'gripLoadCap', 1, 6, 0.1).name('Grip load cap ×')
+assistsFolder.add(p, 'landingGripTime', 0, 1, 0.05).name('Landing grip time (s)')
+assistsFolder.add(p, 'landingGripFactor', 0.1, 1, 0.05).name('Landing grip start')
+
+const jumpFolder = vehicleFolder.addFolder('Jump')
+jumpFolder.close()
+jumpFolder.add(p, 'jumpImpulse', 0, 8000, 100).name('Jump force')
+jumpFolder.add(p, 'jumpCooldown', 0, 2, 0.05).name('Cooldown')
+jumpFolder.add(p, 'jumpBufferTime', 0, 0.5, 0.01).name('Input buffer')
+jumpFolder.add(p, 'airborneGravityScale', 1, 3, 0.05).name('Air gravity ×')
+
+debugFolder.add(vehicle.debugParams, 'physics').name('Show physics colliders').onChange((visible) => physicsDebug.setVisible(visible))
+debugFolder.add(debug, 'topView').name('Top-down view')
+
+const actions = {
+  respawn: () => vehicle.respawn(),
+  resetParams: () => {
+    Object.assign(p, DEFAULT_PARAMS)
+    Object.assign(bm, DEFAULT_BODY_MODEL_PARAMS)
+    Object.assign(wm, DEFAULT_WHEEL_MODEL_PARAMS)
+    Object.assign(rp, DEFAULT_REFLECTION_PARAMS)
+    Object.assign(tm, DEFAULT_TIRE_MARK_PARAMS)
+    Object.assign(postParams, DEFAULT_POST_PARAMS)
+    Object.assign(cameraParams, DEFAULT_CAMERA_PARAMS)
+    Object.assign(shadowParams, DEFAULT_SHADOW_PARAMS)
+    hemi.intensity = DEFAULT_LIGHTING_PARAMS.ambientIntensity
+    sun.intensity = DEFAULT_LIGHTING_PARAMS.sunIntensity
+    postBoostBlend = 0
+    cameraBoostBlend = 0
+    windLinesBlend = 0
+    colorGradePass.uniforms.windLines.value = 0
+    applyPostParams()
+    applyCameraParams()
+    applyShadowParams()
+    vehicle.applyWheelParams()
+    vehicle.applyChassisParams()
+    vehicle.applyBodyModelParams()
+    vehicle.applyWheelModelParams()
+    vehicle.applyReflectionParams()
+    vehicle.applyTireMarkParams()
+    vehicle.clearTireMarks()
+    physicsDebug.setVisible(vehicle.debugParams.physics)
+    gui.controllersRecursive().forEach((c) => c.updateDisplay())
+  },
+}
+gui.add(actions, 'respawn').name('Respawn car (R)')
+gui.add(actions, 'resetParams').name('Reset to defaults')
+
+gui.foldersRecursive().forEach((folder) => folder.close())
+gui.close()
+
 // --- Loop --------------------------------------------------------------------
 
 const FIXED_STEP = 1 / 60
 let lastTime = performance.now()
+let fpsElapsed = 0
+let fpsFrames = 0
 const speedValue = document.getElementById('speed-value')
 const cockpitSpeed = document.getElementById('cockpit-speed')
 
@@ -1086,6 +1670,14 @@ function tick() {
   const now = performance.now()
   const delta = Math.min((now - lastTime) / 1000, 0.1)
   lastTime = now
+  fpsElapsed += delta
+  fpsFrames += 1
+  if (fpsElapsed >= 0.25) {
+    performanceParams.fps = Math.round(fpsFrames / fpsElapsed)
+    fpsController.updateDisplay()
+    fpsElapsed = 0
+    fpsFrames = 0
+  }
 
   // Freeze the whole simulation while the results screen is up (race over) —
   // the car, opponent, physics and clock all stop.
@@ -1103,13 +1695,17 @@ function tick() {
   // Fog would hide the whole track from the high top-down camera.
   scene.fog = debug.topView ? null : sceneFog
 
-  // Keep the sun/shadow frustum centred on the car.
+  // Keep the sun/shadow frustum centred on the car. Snap the follow point to
+  // shadow-map texel increments so shadow edges don't shimmer while driving.
+  const shadowTexelWorld = (shadowParams.shadowCameraSize * 2) / shadowParams.shadowMapSize
+  const shadowFollowX = Math.round(vehicle.group.position.x / shadowTexelWorld) * shadowTexelWorld
+  const shadowFollowZ = Math.round(vehicle.group.position.z / shadowTexelWorld) * shadowTexelWorld
   sun.position.set(
-    vehicle.group.position.x + 60,
-    vehicle.group.position.y + 90,
-    vehicle.group.position.z + 30
+    shadowFollowX + shadowParams.sunX,
+    shadowParams.sunY,
+    shadowFollowZ + shadowParams.sunZ
   )
-  sun.target.position.copy(vehicle.group.position)
+  sun.target.position.set(shadowFollowX, 0, shadowFollowZ)
   sun.target.updateMatrixWorld()
 
   const roundedSpeed = Math.round(vehicle.speedKmh)
@@ -1131,7 +1727,26 @@ function tick() {
     if (crackTimer <= 0) clearCrack()
   }
 
-  renderer.render(scene, camera)
+  // Boost-driven camera/post blends, then render through the composer.
+  const boosting = vehicle.input.boost || vehicle.input.gamepadBoost
+  const boostTarget = boosting ? 1 : 0
+  postBoostBlend = THREE.MathUtils.lerp(postBoostBlend, boostTarget, 1 - Math.exp(-8 * delta))
+  cameraBoostBlend = THREE.MathUtils.lerp(cameraBoostBlend, boostTarget, 1 - Math.exp(-7 * delta))
+  const windLinesTarget = boosting && vehicle.speedKmh > postParams.windLinesMinSpeedKmh ? 1 : 0
+  windLinesBlend = THREE.MathUtils.lerp(windLinesBlend, windLinesTarget, 1 - Math.exp(-5 * delta))
+  colorGradePass.uniforms.windLines.value = windLinesBlend * postParams.windLinesStrength
+  // Don't fight the fixed top-down debug camera with the boost FOV kick.
+  const baseFov = debug.topView ? cameraParams.fov : THREE.MathUtils.lerp(cameraParams.fov, 72, cameraBoostBlend)
+  applyCameraParams(baseFov)
+  applyPostParams()
+  colorGradePass.uniforms.time.value = now * 0.001
+  physicsDebug.update()
+
+  if (postParams.enabled) {
+    composer.render()
+  } else {
+    renderer.render(scene, camera)
+  }
   requestAnimationFrame(tick)
 }
 
