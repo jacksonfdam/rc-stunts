@@ -1,6 +1,10 @@
 # Raycast RC Car — with a Stunts (1990) web port
 
-[![Raycast vehicle demo](src/assets/demo.jpg)](https://raycast-rc-car.netlify.app/)
+<img width="1078" height="823" alt="Screenshot 2026-07-19 at 12 31 54" src="https://github.com/user-attachments/assets/77c45f0a-5166-4a59-ba98-9fc5db751fc8" /> <br/>
+<img width="2336" height="1358" alt="Screenshot 2026-07-20 at 12 06 01" src="https://github.com/user-attachments/assets/6651262f-c7e3-4d47-be7a-fc3b8d35259d" /><br/>
+<img width="2333" height="1353" alt="Screenshot 2026-07-20 at 12 06 12" src="https://github.com/user-attachments/assets/0f3f7e0f-257f-4737-8068-1b0bb0366071" /><br/>
+<img width="2322" height="1363" alt="Screenshot 2026-07-20 at 12 05 53 (2)" src="https://github.com/user-attachments/assets/031348a7-c176-48df-8ccb-dbeb04f59042" /><br/>
+
 
 I loved the [Raycast RC Car demo](https://raycast-rc-car.netlify.app/) by
 [icurtis1](https://github.com/icurtis1/raycast-vehicle) and decided to build a
