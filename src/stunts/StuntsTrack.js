@@ -493,9 +493,11 @@ export class StuntsTrack {
    */
   _buildRoute() {
     const route = []
+    const routeCells = []
     const start = this.startCell
     if (!start) {
       this.route = route
+      this.routeCells = routeCells
       return
     }
     const DIRS = [
@@ -515,6 +517,7 @@ export class StuntsTrack {
       // Route y = the road surface height at this tile; the opponent car's mesh
       // is modelled with its wheels' contact at its own origin, so it sits flush.
       route.push(new THREE.Vector3(centre.x, this._tileHeight(cur.x, cur.y), centre.z))
+      routeCells.push({ x: cur.x, y: cur.y })
       visited.add(key(cur))
 
       const cands = DIRS.map(([dx, dy]) => ({ x: cur.x + dx, y: cur.y + dy, dx, dy })).filter(
@@ -531,6 +534,29 @@ export class StuntsTrack {
       if (route.length > 3 && cur.x === start.x && cur.y === start.y) break
     }
     this.route = route
+    this.routeCells = routeCells
+  }
+
+  /**
+   * A drivable spawn point: the first straight tile along the route, facing the
+   * racing direction. Tracks without a start/finish piece otherwise spawn on the
+   * first scanned drivable tile — often a corner, where the car is boxed in by
+   * the turn's walls and can't move. Falls back to the start tile.
+   */
+  getSpawn() {
+    const isStraight = (cell) => {
+      const cat = describeElement(this.trackFile.trackAt(cell.x, cell.y)).category
+      return cat === CATEGORY.ROAD || cat === CATEGORY.START
+    }
+    let i = 0
+    if (this.routeCells?.length) {
+      const found = this.routeCells.findIndex(isStraight)
+      if (found >= 0) i = found
+    }
+    const position = (this.route[i] ?? this.start).clone()
+    const next = this.route[i + 1] ?? (this.route.length ? this.route[(i + 1) % this.route.length] : null)
+    const yaw = next ? Math.atan2(next.x - position.x, next.z - position.z) : 0
+    return { position, yaw }
   }
 
   /** A fresh 2×2 checker texture (repeat it to get the square count you want). */
