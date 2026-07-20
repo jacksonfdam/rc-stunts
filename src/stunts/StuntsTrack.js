@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import * as CANNON from 'cannon-es'
 
-import { GRID } from './TrackFile.js'
+import { GRID, FILLERS } from './TrackFile.js'
 import { describeElement, CATEGORY } from './trackElements.js'
 
 /**
@@ -124,7 +124,7 @@ export class StuntsTrack {
         this._addElevated(el, center)
         break
       case CATEGORY.LOOP:
-        this._addLoop(el, center)
+        this._addLoop(el, center, x, y)
         break
       case CATEGORY.PIPE:
       case CATEGORY.TUNNEL:
@@ -308,38 +308,57 @@ export class StuntsTrack {
     this.colliderBodies.push(body)
   }
 
-  _addLoop(el, center) {
-    // A full vertical-circle road ribbon in the travel plane: enters at ground
-    // going +travel, curves up and over. The car needs speed to keep contact at
-    // the top (see the speed-gated upright assist in Vehicle.js).
+  _addLoop(el, center, x, y) {
+    // A loop is 2×1: the anchor plus one filler neighbour, and the vertical
+    // circle spans BOTH tiles. Derive the travel axis + centre from which side
+    // the filler is on (0x40 → filler south, travel Z; 0x41 → filler east,
+    // travel X), so the ring sits centred over the pair and aligned with the road.
+    let yaw = 0
+    const cx0 = center.x
+    const cz0 = center.z
+    let cx = cx0
+    let cz = cz0
+    const half = TILE / 2
+    if (FILLERS.has(this.trackFile.trackAt(x + 1, y))) {
+      yaw = Math.PI / 2 // travel +X (east)
+      cx = cx0 + half
+    } else if (FILLERS.has(this.trackFile.trackAt(x - 1, y))) {
+      yaw = Math.PI / 2
+      cx = cx0 - half
+    } else if (FILLERS.has(this.trackFile.trackAt(x, y + 1))) {
+      yaw = 0 // travel +Z (north)
+      cz = cz0 + half
+    } else if (FILLERS.has(this.trackFile.trackAt(x, y - 1))) {
+      yaw = 0
+      cz = cz0 - half
+    }
+
     const RL = TILE * 0.85
     const halfW = TILE * 0.36
     const SEGMENTS = 40
     const rings = []
     for (let i = 0; i <= SEGMENTS; i++) {
       const a = (i / SEGMENTS) * Math.PI * 2
-      const y = RL - RL * Math.cos(a)
-      const z = RL * Math.sin(a)
+      const yy = RL - RL * Math.cos(a)
+      const zz = RL * Math.sin(a)
       rings.push([
-        [-halfW, y, z],
-        [halfW, y, z],
+        [-halfW, yy, zz],
+        [halfW, yy, zz],
       ])
     }
-    const yaw = this._yaw(el.orient)
-    this._addSweptSurface(rings, center, yaw, el.color)
+    const loopCentre = new THREE.Vector3(cx, center.y, cz)
+    this._addSweptSurface(rings, loopCentre, yaw, el.color)
 
-    // Record the loop for the stick-to-surface assist. The circle lies in the
-    // vertical plane through the travel axis; its centre is one radius above the
-    // entry tile. wx/wz is the horizontal width axis (out-of-plane direction).
+    // Record the loop for the stick-to-surface assist.
     this.loops.push({
-      cx: center.x,
-      cz: center.z,
-      cy: RL, // circle centre height (entry is at y=0)
+      cx,
+      cz,
+      cy: RL,
       RL,
       halfW,
-      wx: Math.cos(yaw), // horizontal width axis (out of loop plane)
+      wx: Math.cos(yaw),
       wz: -Math.sin(yaw),
-      tdx: Math.sin(yaw), // horizontal travel direction (into the loop)
+      tdx: Math.sin(yaw),
       tdz: Math.cos(yaw),
     })
   }
