@@ -1,30 +1,48 @@
-// Start menu (shown over a bird's-eye track preview) and the ☰ button that
-// reopens it. Builds its own DOM with the same ids/classes the stylesheet
-// targets and exposes the sub-elements the game populates and wires (track /
-// car / driver selects, meta readouts, colour-swatch container, drive button).
-// Show/hide orchestration (camera, HUD, audio) stays in the game script.
+// Start menu styled after the original Stunts (1990) selection screen: road-sign
+// buttons over the track preview inside a hazard-striped frame, with the car and
+// its "Let's Drive" plate in the centre. Each sign carries a transparent native
+// <select> so a click opens the real picker. Builds its own DOM and exposes the
+// sub-elements the game populates/wires; show/hide orchestration stays in the game.
 
 export function createMenu() {
   const root = document.createElement('div')
   root.id = 'menu'
   root.innerHTML = `
-    <div class="card">
-      <h1>STUNTS<span>Web Port</span></h1>
-      <label for="menu-track">Track</label>
-      <select id="menu-track"></select>
-      <div class="meta">Horizon: <b id="menu-horizon">—</b> · <b id="menu-tiles">0</b> tiles</div>
-      <label for="menu-car">Car</label>
-      <select id="menu-car"></select>
-      <div class="meta" id="menu-car-stats">—</div>
-      <label for="menu-driver">Driver</label>
-      <select id="menu-driver"></select>
-      <div class="meta" id="menu-driver-bio">—</div>
-      <label>Car color</label>
-      <div id="menu-colors"></div>
-      <button id="menu-drive">Let's Drive ▸</button>
-      <div class="foot">WASD / arrows to drive · Shift boost · Space jump · R respawn · C cockpit</div>
-    </div>
-    <div class="preview-hint">bird's-eye preview</div>`
+    <div class="menu-frame">
+      <div class="sign sign--car">
+        <div class="sign-shape"><span>Car</span></div>
+        <select id="menu-car" aria-label="Car"></select>
+        <div class="sign-cap" id="menu-car-stats">—</div>
+      </div>
+
+      <div class="sign sign--driver">
+        <div class="sign-shape"><span>Driver</span></div>
+        <select id="menu-driver" aria-label="Driver"></select>
+        <div class="sign-cap" id="menu-driver-bio">—</div>
+      </div>
+
+      <div class="sign sign--track">
+        <div class="sign-shape"><span>Track</span></div>
+        <select id="menu-track" aria-label="Track"></select>
+        <div class="sign-cap">Horizon: <b id="menu-horizon">—</b> · <b id="menu-tiles">0</b> tiles</div>
+      </div>
+
+      <div class="sign sign--colour">
+        <div class="sign-shape"><span>Colour</span></div>
+        <button type="button" class="sign-hit" id="menu-colour-toggle" aria-label="Car colour"></button>
+        <div class="sign-cap sign-colours" id="menu-colors"></div>
+      </div>
+
+      <div class="menu-hero">
+        <div class="menu-hero-frame">
+          <div class="menu-wordmark">STUNTS<span>Web Port</span></div>
+          <button id="menu-drive">Let's Drive ▸</button>
+        </div>
+        <div class="menu-plate">STUNTS</div>
+      </div>
+
+      <div class="menu-foot">WASD / arrows · Shift boost · Space jump · R respawn · C view</div>
+    </div>`
 
   const openButton = document.createElement('button')
   openButton.id = 'open-menu'
@@ -33,20 +51,25 @@ export function createMenu() {
 
   document.body.append(root, openButton)
 
-  const $ = (id) => root.querySelector(`#${id}`)
+  const $ = (sel) => root.querySelector(sel)
+  const coloursContainer = $('#menu-colors')
+  // The green "Colour" sign reveals/hides the swatch strip.
+  $('#menu-colour-toggle').addEventListener('click', () => {
+    coloursContainer.classList.toggle('open')
+  })
 
   return {
     root,
     openButton,
-    trackSelect: $('menu-track'),
-    horizonEl: $('menu-horizon'),
-    tilesEl: $('menu-tiles'),
-    carSelect: $('menu-car'),
-    carStatsEl: $('menu-car-stats'),
-    driverSelect: $('menu-driver'),
-    driverBioEl: $('menu-driver-bio'),
-    colorsContainer: $('menu-colors'),
-    driveButton: $('menu-drive'),
+    trackSelect: $('#menu-track'),
+    horizonEl: $('#menu-horizon'),
+    tilesEl: $('#menu-tiles'),
+    carSelect: $('#menu-car'),
+    carStatsEl: $('#menu-car-stats'),
+    driverSelect: $('#menu-driver'),
+    driverBioEl: $('#menu-driver-bio'),
+    colorsContainer: coloursContainer,
+    driveButton: $('#menu-drive'),
     isOpen: () => !root.classList.contains('hidden'),
   }
 }

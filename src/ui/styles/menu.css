@@ -1,27 +1,168 @@
-/* Start menu, shown over a bird's-eye preview of the selected track. */
-#menu { position: fixed; inset: 0; z-index: 20; display: flex; align-items: stretch; }
+/* Start menu styled after the original Stunts selection screen: road-sign
+   buttons over the track preview, inside a yellow/black hazard frame, with the
+   car's "Let's Drive" plate in the centre. Each sign holds a transparent native
+   <select> so a click opens the real picker. */
+
+#menu { position: fixed; inset: 0; z-index: 20; font-family: 'Courier New', monospace; }
 #menu.hidden { display: none; }
-#menu .card { width: 340px; max-width: 88vw; padding: 26px 24px;
-  background: linear-gradient(160deg, rgba(15,23,42,0.94), rgba(15,23,42,0.82));
-  backdrop-filter: blur(8px); border-right: 1px solid rgba(148,163,184,0.25);
-  display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
-#menu .preview-hint { position: absolute; bottom: 16px; right: 20px; font-size: 12px;
-  color: rgba(226,232,240,0.7); text-shadow: 0 2px 6px rgba(0,0,0,0.8); }
-#menu h1 { font-size: 30px; font-weight: 800; letter-spacing: 1px; line-height: 1; }
-#menu h1 span { display: block; font-size: 13px; font-weight: 700; letter-spacing: 3px;
-  text-transform: uppercase; color: var(--accent-amber); margin-top: 6px; }
-#menu label { font-size: 11px; font-weight: 700; letter-spacing: 1px;
-  text-transform: uppercase; color: var(--muted); margin-top: 6px; }
-#menu select { padding: 8px 10px; background: var(--input-bg); color: var(--text); font: inherit;
-  font-size: 13px; border: 1px solid rgba(148,163,184,0.35); border-radius: var(--radius); cursor: pointer; }
-#menu .meta { font-size: 13px; color: #cbd5e1; }
-#menu .meta b { color: #fff; }
-#menu #menu-colors { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-#menu #menu-colors .swatch { width: 24px; height: 24px; border-radius: 6px; cursor: pointer;
-  border: 2px solid rgba(255,255,255,0.25); }
-#menu #menu-colors .swatch.active { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.35); }
-#menu #menu-drive { margin-top: 14px; padding: 14px; font: inherit; font-size: 18px; font-weight: 800;
-  color: #052e16; background: linear-gradient(#4ade80, #22c55e); border: none; border-radius: 10px;
-  cursor: pointer; letter-spacing: 0.5px; }
-#menu #menu-drive:hover { filter: brightness(1.08); }
-#menu .foot { margin-top: auto; font-size: 11px; color: var(--faint); line-height: 1.5; }
+
+/* Hazard-striped frame around the whole screen. */
+.menu-frame {
+  position: absolute;
+  inset: 0;
+  border: 18px solid transparent;
+  border-image: repeating-linear-gradient(45deg, #f5c400 0 16px, #14140f 16px 32px) 18;
+}
+
+/* --- Road signs ------------------------------------------------------------- */
+.sign {
+  position: absolute;
+  width: 128px;
+  text-align: center;
+}
+.sign--car { top: 9%; left: 7%; }
+.sign--driver { bottom: 13%; left: 6%; }
+.sign--track { top: 9%; right: 7%; }
+.sign--colour { bottom: 13%; right: 7%; }
+
+.sign-shape {
+  position: relative;
+  width: 128px;
+  height: 128px;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: 1px;
+  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.55);
+  filter: drop-shadow(0 6px 6px rgba(0, 0, 0, 0.4));
+}
+/* grey signpost behind each sign */
+.sign-shape::after {
+  content: '';
+  position: absolute;
+  bottom: -46px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 56px;
+  background: linear-gradient(#9aa3ad, #6b7280);
+  z-index: -1;
+}
+
+/* The clickable picker sits transparently over each sign's shape. */
+.sign select,
+.sign .sign-hit {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 128px;
+  height: 128px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+/* Car — blue circle */
+.sign--car .sign-shape { border-radius: 50%; background: radial-gradient(circle at 38% 32%, #3b82f6, #1d4ed8); box-shadow: inset 0 0 0 5px #fff; }
+/* Driver — red octagon (STOP) */
+.sign--driver .sign-shape { background: #dc2626; clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%); box-shadow: inset 0 0 0 5px #fff; }
+/* Track — orange inverted triangle (yield) */
+.sign--track .sign-shape { background: #f59e0b; clip-path: polygon(0 0, 100% 0, 50% 100%); box-shadow: inset 0 0 0 5px #fff; align-items: start; padding-top: 22px; }
+/* Colour — green rectangle */
+.sign--colour .sign-shape { background: #16a34a; border-radius: 6px; box-shadow: inset 0 0 0 5px #fff; }
+
+/* Small caption under each sign. */
+.sign-cap {
+  margin-top: 54px;
+  font-size: 12px;
+  color: #f8fafc;
+  background: rgba(10, 14, 22, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 4px 8px;
+  line-height: 1.35;
+}
+.sign-cap b { color: #fde047; }
+
+/* Car-colour swatch strip, revealed by the green sign. */
+.sign-colours { display: none; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.sign-colours.open { display: flex; }
+.sign-colours .swatch { width: 22px; height: 22px; border-radius: 4px; cursor: pointer; border: 2px solid rgba(255, 255, 255, 0.35); }
+.sign-colours .swatch.active { border-color: #fff; box-shadow: 0 0 0 2px #fde047; }
+.sign-colours input[type="color"] { width: 24px; height: 24px; padding: 0; border: none; background: none; cursor: pointer; }
+
+/* --- Centre: the car's "Let's Drive" plate --------------------------------- */
+.menu-hero {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+.menu-hero-frame {
+  border: 3px solid #d946ef; /* magenta selection box, as in the original */
+  background: rgba(10, 14, 22, 0.72);
+  backdrop-filter: blur(3px);
+  padding: 18px 26px 20px;
+  border-radius: 4px;
+}
+.menu-wordmark {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: 5px;
+  color: #fde047;
+  line-height: 1;
+}
+.menu-wordmark span {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #cbd5e1;
+  margin-top: 6px;
+}
+#menu-drive {
+  margin-top: 16px;
+  padding: 12px 26px;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #052e16;
+  background: linear-gradient(#4ade80, #22c55e);
+  border: 3px solid #05070c;
+  border-radius: 0;
+  cursor: pointer;
+}
+#menu-drive:hover { filter: brightness(1.08); }
+.menu-plate {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 3px 12px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  color: #14140f;
+  background: #f8fafc;
+  border: 2px solid #14140f;
+  border-radius: 3px;
+}
+
+.menu-foot {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: rgba(226, 232, 240, 0.8);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+}
