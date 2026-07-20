@@ -11,6 +11,7 @@ import {
   buildTireMarksSection,
 } from '../ui/tuning/sections.js'
 import { createColorSwatches } from '../ui/molecules/ColorSwatches.js'
+import { createResultsScreen } from '../ui/organisms/ResultsScreen.js'
 
 import {
   Vehicle,
@@ -360,7 +361,7 @@ function initAudio() {
 function updateAudio(driving) {
   if (!audioCtx || !soundOn) return
   const t = audioCtx.currentTime
-  if (resultsOpen) {
+  if (resultsScreen.isOpen) {
     engineGain.gain.setTargetAtTime(0, t, 0.08) // engine off when the race ends
     return
   }
@@ -463,7 +464,7 @@ function formatTime(seconds) {
 }
 
 function updateTimer(delta, driving, carPos) {
-  if (resultsOpen) return // frozen while the results screen is up
+  if (resultsScreen.isOpen) return // frozen while the results screen is up
   if (!timing && driving) {
     timing = true
     timerEl.classList.remove('idle')
@@ -509,14 +510,7 @@ window.addEventListener('keydown', (event) => {
 })
 
 // --- Results / fastest times -------------------------------------------------
-const resultsEl = document.getElementById('results')
-const resultsTrack = document.getElementById('results-track')
-const resultsList = document.getElementById('results-list')
-const rsTime = document.getElementById('rs-time')
-const rsTop = document.getElementById('rs-top')
-const rsAvg = document.getElementById('rs-avg')
-const rsJumps = document.getElementById('rs-jumps')
-let resultsOpen = false
+const resultsScreen = createResultsScreen()
 
 function finishLap(lapSeconds) {
   const code = document.getElementById('track-name').textContent
@@ -536,31 +530,18 @@ function finishLap(lapSeconds) {
     /* storage may be unavailable; results still show */
   }
 
-  resultsTrack.textContent = code
-  resultsList.innerHTML = ''
-  times.forEach((e, i) => {
-    const li = document.createElement('li')
-    const mine = Math.abs(e.t - lapSeconds) < 0.0005
-    if (mine) li.className = 'you'
-    li.innerHTML =
-      `<span class="rank">${i + 1}.</span>` +
-      `<span class="who">${mine ? 'You' : '···'}</span>` +
-      `<span>${formatTime(e.t)}</span>`
-    resultsList.append(li)
+  resultsScreen.show({
+    trackName: code,
+    entries: times.map((e, i) => {
+      const mine = Math.abs(e.t - lapSeconds) < 0.0005
+      return { rank: i + 1, label: mine ? 'You' : '···', time: formatTime(e.t), mine }
+    }),
+    lapTime: formatTime(lapSeconds),
+    topSpeed: Math.round(lapTop),
+    avgSpeed: Math.round(lapSpeedSum / Math.max(1, lapSpeedN)),
+    jumps: lapJumps,
   })
-  rsTime.textContent = formatTime(lapSeconds)
-  rsTop.textContent = Math.round(lapTop)
-  rsAvg.textContent = Math.round(lapSpeedSum / Math.max(1, lapSpeedN))
-  rsJumps.textContent = String(lapJumps)
-
-  resultsOpen = true
-  resultsEl.classList.remove('hidden')
 }
-
-document.getElementById('results-continue').addEventListener('click', () => {
-  resultsEl.classList.add('hidden')
-  resultsOpen = false
-})
 
 // --- Loop assist -------------------------------------------------------------
 // A raycast vehicle can't complete a vertical loop on physics alone (it rams the
@@ -979,7 +960,7 @@ const wrongWayEl = document.getElementById('wrong-way')
 const _wwFwd = new THREE.Vector3()
 
 function updateWrongWay() {
-  if (!track || !track.route || track.route.length < 3 || resultsOpen ||
+  if (!track || !track.route || track.route.length < 3 || resultsScreen.isOpen ||
       !menuEl.classList.contains('hidden')) {
     wrongWayEl.classList.add('hidden')
     return
@@ -1222,7 +1203,7 @@ function tick() {
 
   // Freeze the whole simulation while the results screen is up (race over) —
   // the car, opponent, physics and clock all stop.
-  if (!resultsOpen) {
+  if (!resultsScreen.isOpen) {
     physicsWorld.step(FIXED_STEP, delta, 3)
     vehicle.update(delta)
     updateLoopAssist(delta)
