@@ -513,69 +513,66 @@ document.getElementById('results-continue').addEventListener('click', () => {
 // press it toward the loop surface (centripetal help, scaled up toward the top)
 // and align its roof to the inward normal so the wheels stay on the ribbon.
 const UP_VEC = new CANNON.Vec3(0, 1, 0)
-const _loopUp = new CANNON.Vec3()
-const _loopAxis = new CANNON.Vec3()
-const clampf = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
+// A raycast vehicle can't reliably drive a vertical loop on physics alone, so
+// once the car enters a loop's base with enough forward speed it's "railed":
+// animated around the circle (position + orientation) and released, upright and
+// moving forward, at the exit. Guarantees the loop always completes.
+const LOOP_UP = new CANNON.Vec3(0, 1, 0)
+let loopRide = null // { L, alpha, speed }
+const _lFwd = new THREE.Vector3()
+const _lUp = new THREE.Vector3()
+const _lRgt = new THREE.Vector3()
+const _lMat = new THREE.Matrix4()
+const _lQuat = new THREE.Quaternion()
 
-function updateLoopAssist() {
-  if (!track || !track.loops.length || vehicle.speedKmh < 18) return
+function updateLoopAssist(delta) {
   const b = vehicle.chassisBody
-  const P = b.position
-  for (const L of track.loops) {
-    const dx = P.x - L.cx
-    const dy = P.y - L.cy
-    const dz = P.z - L.cz
-    const wdist = dx * L.wx + dz * L.wz // distance out of the loop plane
-    if (Math.abs(wdist) > L.halfW + 4) continue
-    const ix = dx - wdist * L.wx
-    const iy = dy
-    const iz = dz - wdist * L.wz
-    const radial = Math.hypot(ix, iy, iz)
-    if (radial > L.RL + 32 || radial < L.RL - 30) continue
 
-    // Unit vector toward the circle centre (the inward surface normal).
-    const nx = -ix / radial
-    const ny = -iy / radial
-    const nz = -iz / radial
-    const heightFactor = clampf(P.y / (2 * L.RL), 0, 1)
-    const m = b.mass
-
-    // 1) Hold the car on the tube: moderate radial spring toward radius = RL,
-    //    plus centripetal help that grows toward the top so it can't fall off.
-    const inward = m * 9.82 * 3.6 * heightFactor + 90 * (radial - L.RL)
-    b.applyForce(new CANNON.Vec3(nx * inward, ny * inward, nz * inward))
-
-    // 2) Forward tangent from the car's ANGLE around the loop (reliable even
-    //    when nearly stalled, unlike using instantaneous velocity). With the
-    //    in-plane offset split into travel (s) and vertical (u) components,
-    //    cosα = -u/radial, sinα = s/radial, and the forward tangent is
-    //    travelDir*cosα + up*sinα.
-    const s = ix * L.tdx + iz * L.tdz
-    const cosA = -iy / radial
-    const sinA = s / radial
-    const fx = L.tdx * cosA
-    const fy = sinA
-    const fz = L.tdz * cosA
-    const vTan = b.velocity.x * fx + b.velocity.y * fy + b.velocity.z * fz
-    // Motorise the loop toward a target speed so it can't stall on the climb.
-    const TARGET = 60
-    const deficit = TARGET - vTan
-    if (deficit > 0) {
-      const f = m * 32 * clampf(deficit / TARGET, 0, 1)
-      b.applyForce(new CANNON.Vec3(fx * f, fy * f, fz * f))
+  if (loopRide) {
+    const L = loopRide.L
+    loopRide.alpha += (loopRide.speed / L.RL) * delta
+    if (loopRide.alpha >= Math.PI * 2) {
+      // Release at the base, upright, moving forward out of the loop.
+      b.position.set(L.cx, L.cy - L.RL + 1.2, L.cz)
+      b.velocity.set(L.tdx * loopRide.speed, 0, L.tdz * loopRide.speed)
+      b.angularVelocity.set(0, 0, 0)
+      b.quaternion.setFromAxisAngle(LOOP_UP, Math.atan2(L.tdx, L.tdz))
+      loopRide = null
+      return
     }
+    const a = loopRide.alpha
+    // Point on the loop centreline; the circle centre is at (cx, cy, cz).
+    const px = L.cx + L.tdx * L.RL * Math.sin(a)
+    const py = L.cy - L.RL * Math.cos(a)
+    const pz = L.cz + L.tdz * L.RL * Math.sin(a)
+    const nx = (L.cx - px) / L.RL // inward normal (toward centre) = car's up
+    const ny = (L.cy - py) / L.RL
+    const nz = (L.cz - pz) / L.RL
+    b.position.set(px + nx * 1.4, py + ny * 1.4, pz + nz * 1.4) // ride just inside
+    _lFwd.set(L.tdx * Math.cos(a), Math.sin(a), L.tdz * Math.cos(a)).normalize() // tangent
+    _lUp.set(nx, ny, nz)
+    _lRgt.crossVectors(_lUp, _lFwd).normalize()
+    _lMat.makeBasis(_lRgt, _lUp, _lFwd)
+    _lQuat.setFromRotationMatrix(_lMat)
+    b.quaternion.set(_lQuat.x, _lQuat.y, _lQuat.z, _lQuat.w)
+    b.velocity.set(_lFwd.x * loopRide.speed, _lFwd.y * loopRide.speed, _lFwd.z * loopRide.speed)
+    b.angularVelocity.set(0, 0, 0)
+    return
+  }
 
-    // 3) Rail the rotation: steer the car's angular velocity toward the rate
-    //    the loop demands (ω = v/RL about the width axis, sign = travelDir×up =
-    //    -widthAxis) so the chassis keeps tumbling with the loop and the wheels
-    //    stay on the ribbon instead of the body detaching past vertical.
-    const omega = vTan / L.RL
-    const oxT = -L.wx * omega
-    const ozT = -L.wz * omega
-    const blend = 0.45 * clampf(heightFactor + 0.15, 0, 1)
-    b.angularVelocity.x += (oxT - b.angularVelocity.x) * blend
-    b.angularVelocity.z += (ozT - b.angularVelocity.z) * blend
-    b.angularVelocity.y += (0 - b.angularVelocity.y) * blend * 0.5
+  // Not riding: catch the car at a loop base moving forward fast enough.
+  if (!track || !track.loops.length) return
+  const P = b.position
+  const vx = b.velocity.x
+  const vz = b.velocity.z
+  for (const L of track.loops) {
+    if (P.y > 4) continue
+    if (Math.hypot(P.x - L.cx, P.z - L.cz) > TILE * 0.85) continue
+    const along = vx * L.tdx + vz * L.tdz // forward speed into the loop
+    if (along > 15) {
+      loopRide = { L, alpha: 0.06, speed: Math.max(along, 42) }
+      return
+    }
   }
 }
 
@@ -1095,7 +1092,7 @@ function tick() {
   if (!resultsOpen) {
     physicsWorld.step(FIXED_STEP, delta, 3)
     vehicle.update(delta)
-    updateLoopAssist()
+    updateLoopAssist(delta)
     updateOpponent(delta)
   }
   if (debug.topView) updateTopView()
