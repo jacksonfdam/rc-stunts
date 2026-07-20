@@ -4,6 +4,7 @@ import GUI from 'lil-gui'
 import { createPostProcessing, DEFAULT_POST_PARAMS } from '../engine/postProcessing.js'
 import { createPhysicsDebug } from '../engine/physicsDebug.js'
 import { createShadowController } from '../engine/shadow.js'
+import { createGamepadInput } from '../engine/gamepad.js'
 import {
   buildVehicleSections,
   buildPostSection,
@@ -213,6 +214,7 @@ const physicsDebug = createPhysicsDebug(scene, physicsWorld, vehicle)
 const menu = createMenu()
 const cockpitOverlay = createCockpit()
 const crash = createCrashOverlay()
+const gamepadInput = createGamepadInput(vehicle)
 
 // --- AI opponent -------------------------------------------------------------
 // A ghost car that drives the track's route (see StuntsTrack._buildRoute). It's
@@ -1158,6 +1160,7 @@ function tick() {
   // Freeze the whole simulation while the results screen is up (race over) —
   // the car, opponent, physics and clock all stop.
   if (!resultsScreen.isOpen) {
+    gamepadInput.poll()
     physicsWorld.step(FIXED_STEP, delta, 3)
     vehicle.update(delta)
     updateLoopAssist(delta)
