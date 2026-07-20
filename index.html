@@ -3,400 +3,273 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vehicle Controller — three.js + cannon-es</title>
+    <title>Stunts — a web port of the 1990 racing game</title>
     <meta
       name="description"
-      content="Drive a physics-based RC car around a three.js playground with jumps, loops, boost, and touch controls."
+      content="A browser web port of Stunts (1990): parse the original .TRK tracks, race an AI opponent through ramps, loops, and bridges, and pick from the classic car and driver roster. Built on three.js + cannon-es."
     />
+    <link rel="canonical" href="https://rcstunts.vercel.app/" />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://raycast-rc-car.netlify.app/" />
-    <meta property="og:title" content="Raycast RC Car" />
+    <meta property="og:url" content="https://rcstunts.vercel.app/" />
+    <meta property="og:title" content="Stunts — a web port of the 1990 racing game" />
     <meta
       property="og:description"
-      content="Drive a physics-based RC car around a three.js playground with jumps, loops, boost, and touch controls."
+      content="A browser web port of Stunts (1990): parse the original .TRK tracks, race an AI opponent through ramps, loops, and bridges, and pick from the classic car and driver roster. Built on three.js + cannon-es."
     />
-    <meta property="og:image" content="https://raycast-rc-car.netlify.app/og-image.jpg" />
+    <meta property="og:image" content="https://rcstunts.vercel.app/og-image.jpg" />
     <meta property="og:image:width" content="1024" />
     <meta property="og:image:height" content="614" />
-    <meta property="og:image:alt" content="An RC car on a colorful three.js stunt course." />
+    <meta property="og:image:alt" content="A car racing a stunt course rebuilt from a classic Stunts track." />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Raycast RC Car" />
+    <meta name="twitter:title" content="Stunts — a web port of the 1990 racing game" />
     <meta
       name="twitter:description"
-      content="Drive a physics-based RC car around a three.js playground with jumps, loops, boost, and touch controls."
+      content="A browser web port of Stunts (1990): parse the original .TRK tracks, race an AI opponent through ramps, loops, and bridges, and pick from the classic car and driver roster. Built on three.js + cannon-es."
     />
-    <meta name="twitter:image" content="https://raycast-rc-car.netlify.app/og-image.jpg" />
+    <meta name="twitter:image" content="https://rcstunts.vercel.app/og-image.jpg" />
     <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { height: 100%; overflow: hidden; background: #0b1020;
+        font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif; color: #e5e7eb; }
+      #app { position: fixed; inset: 0; }
+      #app canvas { display: block; }
 
-      html,
-      body {
-        height: 100%;
-        overflow: hidden;
-        font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
-        background: #1b1b2a;
-        -webkit-tap-highlight-color: transparent;
+      #panel {
+        position: fixed; top: 12px; left: 12px; z-index: 10;
+        background: rgba(15, 23, 42, 0.82); backdrop-filter: blur(6px);
+        border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 10px;
+        padding: 12px 14px; font-size: 13px; line-height: 1.5; max-width: 260px;
       }
-
-      #app {
-        position: fixed;
-        inset: 0;
+      #panel h1 { font-size: 15px; margin-bottom: 6px; }
+      #panel .row { color: #94a3b8; }
+      #panel .row b { color: #e5e7eb; font-weight: 700; }
+      #panel label {
+        display: inline-block; margin-top: 10px; cursor: pointer;
+        background: #2563eb; color: #fff; padding: 6px 10px; border-radius: 8px; font-weight: 700;
       }
-
-      canvas {
-        display: block;
-        touch-action: none;
+      #panel input[type="file"] { display: none; }
+      #panel select {
+        display: block; width: 100%; margin-top: 10px; padding: 6px 8px;
+        background: #0f172a; color: #e5e7eb; font: inherit; font-size: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 8px; cursor: pointer;
       }
-
-      .hud {
-        position: fixed;
-        pointer-events: none;
-        color: #fff;
-        user-select: none;
-      }
+      #panel .hint { margin-top: 8px; font-size: 11px; color: #64748b; }
+      #panel .section-label { margin-top: 12px; font-size: 11px; font-weight: 700;
+        letter-spacing: 1px; text-transform: uppercase; color: #94a3b8; }
+      #car-colors { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; align-items: center; }
+      #car-colors .swatch { width: 22px; height: 22px; border-radius: 6px; cursor: pointer;
+        border: 2px solid rgba(255,255,255,0.25); }
+      #car-colors .swatch.active { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.35); }
+      #car-colors input[type="color"] { width: 26px; height: 26px; padding: 0; border: none;
+        background: none; cursor: pointer; }
 
       #speed {
-        right: 24px;
-        bottom: 24px;
-        text-align: center;
-        padding: 9px 12px 10px;
-        width: 108px;
-        background: rgba(8, 10, 18, 0.34);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 14px;
-        backdrop-filter: blur(12px);
+        position: fixed; bottom: 16px; right: 20px; z-index: 10;
+        font-weight: 800; font-size: 40px; text-shadow: 0 2px 8px rgba(0,0,0,0.6);
       }
+      #speed span { font-size: 16px; color: #94a3b8; margin-left: 4px; }
 
-      #speed .value {
-        font-size: 37px;
-        font-weight: 800;
-        line-height: 0.95;
-        font-variant-numeric: tabular-nums;
-        letter-spacing: -1px;
+      #position { position: fixed; bottom: 16px; left: 20px; z-index: 10;
+        font-weight: 800; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
+      #position b { font-size: 40px; color: #fde047; }
+      #position span { font-size: 16px; color: #94a3b8; }
+      #sound-btn { position: fixed; top: 12px; right: 172px; z-index: 11; padding: 6px 10px;
+        font-size: 14px; cursor: pointer; background: rgba(15,23,42,0.82);
+        border: 1px solid rgba(148,163,184,0.3); border-radius: 8px; }
+
+      #timer {
+        position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 10;
+        font-variant-numeric: tabular-nums; font-weight: 800; font-size: 34px;
+        letter-spacing: 1px; color: #fde047; text-shadow: 0 2px 8px rgba(0,0,0,0.7);
       }
+      #timer.idle #timer-value { color: #94a3b8; }
+      #timer small { display: block; text-align: center; font-size: 11px;
+        font-weight: 700; letter-spacing: 2px; color: #94a3b8; text-shadow: none; }
+      #lap-info { text-align: center; margin-top: 2px; font-size: 13px; font-weight: 700;
+        color: #cbd5e1; text-shadow: 0 1px 4px rgba(0,0,0,0.7); }
+      #lap-info b { color: #34d399; }
+      #lap-info.hidden { display: none; }
 
-      #speed .unit {
-        margin-top: 1px;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 1.3px;
-        opacity: 0.62;
-        text-transform: uppercase;
-      }
+      #opp-hint { position: fixed; top: 46%; left: 50%; transform: translateX(-50%); z-index: 9;
+        font-weight: 800; font-size: 22px; letter-spacing: 1px; color: #f8fafc;
+        text-shadow: 0 2px 8px rgba(0,0,0,0.85); pointer-events: none; }
 
-      #ui-buttons {
-        position: fixed;
-        left: 24px;
-        bottom: 24px;
-        display: flex;
-        gap: 10px;
-        z-index: 20;
-      }
+      .hidden { display: none !important; }
 
-      .ui-btn {
-        display: grid;
-        place-items: center;
-        width: 42px;
-        height: 42px;
-        padding: 0;
-        cursor: pointer;
-        color: rgba(255, 255, 255, 0.88);
-        background: rgba(8, 10, 18, 0.32);
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        border-radius: 999px;
-        backdrop-filter: blur(12px);
-        font: inherit;
-        font-size: 17px;
-        font-weight: 700;
-        transition: background 0.15s, transform 0.1s;
-        user-select: none;
-        -webkit-user-select: none;
-      }
+      /* Cockpit overlay: A-pillars + dashboard framing the windshield. */
+      #cockpit { position: fixed; inset: 0; z-index: 8; pointer-events: none; }
+      #cockpit .pillar { position: absolute; top: 0; width: 20vw; height: 62vh; background: #0c0f16; }
+      #cockpit .pillar.left { left: 0; clip-path: polygon(0 0, 62% 0, 0 100%); }
+      #cockpit .pillar.right { right: 0; clip-path: polygon(38% 0, 100% 0, 100% 100%); }
+      #cockpit .roof { position: absolute; top: 0; left: 0; right: 0; height: 8vh;
+        background: linear-gradient(#0c0f16, rgba(12,15,22,0)); }
+      #cockpit .dash { position: absolute; left: 0; right: 0; bottom: 0; height: 26vh;
+        background: linear-gradient(#1a1f2b 0%, #0b0e15 55%, #05070c 100%);
+        border-top: 3px solid #05070c;
+        clip-path: polygon(0 22%, 22% 6%, 78% 6%, 100% 22%, 100% 100%, 0 100%); }
+      #cockpit .wheel { position: absolute; bottom: -9vh; left: 50%; transform: translateX(-50%);
+        width: 34vh; height: 34vh; border: 3.2vh solid #14171f; border-radius: 50%;
+        box-shadow: inset 0 0 0 1.2vh #0a0c11; }
+      #cockpit .wheel::after { content: ''; position: absolute; inset: 46% 8% auto 8%;
+        height: 8%; background: #14171f; border-radius: 3px; }
+      #cockpit .gauge { position: absolute; bottom: 4vh; left: 24%; transform: translateX(-50%);
+        text-align: center; color: #fde047; font-variant-numeric: tabular-nums;
+        text-shadow: 0 2px 6px rgba(0,0,0,0.8); }
+      #cockpit .gauge b { font-size: 42px; font-weight: 800; }
+      #cockpit .gauge small { display: block; font-size: 12px; font-weight: 700;
+        letter-spacing: 2px; color: #94a3b8; }
 
-      .ui-btn:hover {
-        background: rgba(255, 255, 255, 0.12);
-      }
+      /* Cracked-windshield overlay, shown on a hard crash. */
+      #crack { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 9;
+        pointer-events: none; opacity: 0; transition: opacity 0.12s ease-out; }
+      #crack.show { opacity: 0.92; }
+      #crack line { stroke: #f8fafc; stroke-linecap: round; }
 
-      .ui-btn:active {
-        transform: scale(0.94);
-      }
+      /* Start menu (over a bird's-eye preview of the selected track). */
+      #menu { position: fixed; inset: 0; z-index: 20; display: flex; align-items: stretch; }
+      #menu.hidden { display: none; }
+      #menu .card { width: 340px; max-width: 88vw; padding: 26px 24px;
+        background: linear-gradient(160deg, rgba(15,23,42,0.94), rgba(15,23,42,0.82));
+        backdrop-filter: blur(8px); border-right: 1px solid rgba(148,163,184,0.25);
+        display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+      #menu .preview-hint { position: absolute; bottom: 16px; right: 20px; font-size: 12px;
+        color: rgba(226,232,240,0.7); text-shadow: 0 2px 6px rgba(0,0,0,0.8); }
+      #menu h1 { font-size: 30px; font-weight: 800; letter-spacing: 1px; line-height: 1; }
+      #menu h1 span { display: block; font-size: 13px; font-weight: 700; letter-spacing: 3px;
+        text-transform: uppercase; color: #fbbf24; margin-top: 6px; }
+      #menu label { font-size: 11px; font-weight: 700; letter-spacing: 1px;
+        text-transform: uppercase; color: #94a3b8; margin-top: 6px; }
+      #menu select { padding: 8px 10px; background: #0f172a; color: #e5e7eb; font: inherit;
+        font-size: 13px; border: 1px solid rgba(148,163,184,0.35); border-radius: 8px; cursor: pointer; }
+      #menu .meta { font-size: 13px; color: #cbd5e1; }
+      #menu .meta b { color: #fff; }
+      #menu #menu-colors { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+      #menu #menu-colors .swatch { width: 24px; height: 24px; border-radius: 6px; cursor: pointer;
+        border: 2px solid rgba(255,255,255,0.25); }
+      #menu #menu-colors .swatch.active { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.35); }
+      #menu #menu-drive { margin-top: 14px; padding: 14px; font: inherit; font-size: 18px; font-weight: 800;
+        color: #052e16; background: linear-gradient(#4ade80, #22c55e); border: none; border-radius: 10px;
+        cursor: pointer; letter-spacing: 0.5px; }
+      #menu #menu-drive:hover { filter: brightness(1.08); }
+      #menu .foot { margin-top: auto; font-size: 11px; color: #64748b; line-height: 1.5; }
+      #open-menu { position: fixed; top: 12px; right: 16px; z-index: 11; padding: 7px 12px;
+        font: inherit; font-size: 12px; font-weight: 700; color: #e5e7eb; cursor: pointer;
+        background: rgba(15,23,42,0.82); border: 1px solid rgba(148,163,184,0.3); border-radius: 8px; }
+      #view-btn { position: fixed; top: 12px; right: 92px; z-index: 11; padding: 7px 12px;
+        font: inherit; font-size: 12px; font-weight: 700; color: #e5e7eb; cursor: pointer;
+        background: rgba(15,23,42,0.82); border: 1px solid rgba(148,163,184,0.3); border-radius: 8px; }
+      #wrong-way { position: fixed; top: 22%; left: 50%; transform: translateX(-50%); z-index: 9;
+        font-weight: 800; font-size: 26px; letter-spacing: 1px; color: #fca5a5;
+        text-shadow: 0 2px 8px rgba(0,0,0,0.85); pointer-events: none;
+        animation: wwblink 0.7s steps(2, start) infinite; }
+      @keyframes wwblink { 50% { opacity: 0.35; } }
 
-      .ui-btn svg {
-        width: 17px;
-        height: 17px;
-        fill: none;
-        stroke: rgba(255, 255, 255, 0.88);
-        stroke-width: 2;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-      }
-
-      #fullscreen-toggle .icon-compress {
-        display: none;
-      }
-
-      #fullscreen-toggle.is-fullscreen .icon-expand {
-        display: none;
-      }
-
-      #fullscreen-toggle.is-fullscreen .icon-compress {
-        display: block;
-      }
-
-      #help {
-        left: 24px;
-        bottom: 78px;
-        display: none;
-        grid-template-columns: repeat(2, max-content);
-        gap: 7px 12px;
-        font-size: 11px;
-        line-height: 1.2;
-        background: rgba(8, 10, 18, 0.32);
-        backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.09);
-        border-radius: 16px;
-        padding: 11px 13px;
-        opacity: 0.86;
-      }
-
-      #help.open {
-        display: grid;
-      }
-
-      #help b {
-        display: block;
-        min-width: auto;
-        margin-bottom: 2px;
-        font-weight: 700;
-        color: rgba(255, 255, 255, 0.92);
-      }
-
-      #help span {
-        color: rgba(255, 255, 255, 0.58);
-      }
-
-      /* Wrappers stay invisible to the grid; their children become grid items */
-      #help .keyboard-controls {
-        display: contents;
-      }
-
-      #help .touch-controls {
-        display: none;
-      }
-
-      #title {
-        top: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        font-size: 13px;
-        font-weight: 600;
-        letter-spacing: 3px;
-        text-transform: uppercase;
-        opacity: 0.55;
-        text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-      }
-
-      #mobile-controls {
-        display: none;
-      }
-
-      @media (pointer: coarse) {
-        .lil-gui {
-          display: none !important;
-        }
-
-        #ui-buttons {
-          display: none;
-        }
-
-        #help {
-          display: none !important;
-        }
-
-        #help .keyboard-controls {
-          display: none;
-        }
-
-        #help .touch-controls {
-          display: contents;
-        }
-
-        #speed {
-          top: 16px;
-          right: 16px;
-          bottom: auto;
-        }
-
-        #title {
-          display: none;
-        }
-
-        #mobile-controls {
-          position: fixed;
-          inset: 0;
-          z-index: 10;
-          display: block;
-          pointer-events: none;
-          touch-action: none;
-          user-select: none;
-          -webkit-touch-callout: none;
-          -webkit-user-select: none;
-        }
-
-        #mobile-controls * {
-          user-select: none;
-          -webkit-user-select: none;
-          -webkit-touch-callout: none;
-        }
-
-        #mobile-reset {
-          position: absolute;
-          left: 16px;
-          top: 16px;
-          min-width: 68px;
-          height: 38px;
-          padding: 0 14px;
-          pointer-events: auto;
-          touch-action: none;
-          color: rgba(255, 255, 255, 0.9);
-          background: rgba(8, 10, 18, 0.34);
-          border: 1px solid rgba(255, 255, 255, 0.14);
-          border-radius: 999px;
-          backdrop-filter: blur(12px);
-          font: inherit;
-          font-size: 13px;
-          font-weight: 800;
-          letter-spacing: 0.4px;
-          text-transform: uppercase;
-        }
-
-        #mobile-reset:active {
-          transform: scale(0.96);
-          background: rgba(255, 255, 255, 0.14);
-        }
-
-        #mobile-joystick {
-          position: absolute;
-          right: 24px;
-          bottom: 24px;
-          width: 144px;
-          height: 144px;
-          pointer-events: auto;
-          touch-action: none;
-          border-radius: 999px;
-          background:
-            radial-gradient(circle at center, rgba(255, 255, 255, 0.08) 0 2px, transparent 3px),
-            rgba(8, 10, 18, 0.2);
-          border: 1px solid rgba(255, 255, 255, 0.14);
-          box-shadow: inset 0 0 28px rgba(255, 255, 255, 0.05);
-          backdrop-filter: blur(14px);
-        }
-
-        #mobile-joystick .stick {
-          position: absolute;
-          left: 50%;
-          top: 50%;
-          width: 60px;
-          height: 60px;
-          border-radius: 999px;
-          background: rgba(255, 255, 255, 0.58);
-          border: 1px solid rgba(255, 255, 255, 0.28);
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
-          transform: translate(
-            calc(-50% + var(--stick-x, 0px)),
-            calc(-50% + var(--stick-y, 0px))
-          );
-        }
-
-        #mobile-boost {
-          position: absolute;
-          left: 28px;
-          bottom: 42px;
-          display: grid;
-          place-items: center;
-          width: 88px;
-          height: 88px;
-          pointer-events: auto;
-          touch-action: none;
-          border: 1px solid rgba(255, 255, 255, 0.18);
-          border-radius: 999px;
-          color: #fff;
-          background: rgba(255, 255, 255, 0.1);
-          box-shadow:
-            inset 0 0 24px rgba(255, 255, 255, 0.08),
-            0 12px 30px rgba(0, 0, 0, 0.2);
-          backdrop-filter: blur(16px);
-          font: inherit;
-        }
-
-        #mobile-boost svg {
-          width: 34px;
-          height: 34px;
-          fill: rgba(255, 255, 255, 0.88);
-        }
-
-        #mobile-boost:active,
-        #mobile-boost.is-active {
-          background: rgba(56, 189, 248, 0.34);
-          border-color: rgba(125, 211, 252, 0.5);
-          transform: scale(0.97);
-        }
-      }
+      /* Results / fastest-times screen shown on finishing a lap. */
+      #results { position: fixed; inset: 0; z-index: 25; display: flex; align-items: center;
+        justify-content: center; background: rgba(5,7,12,0.72); backdrop-filter: blur(4px); }
+      #results.hidden { display: none; }
+      #results .rcard { width: 540px; max-width: 92vw; background: #cbd0d8; color: #1a1f2b;
+        border: 3px solid #05070c; border-radius: 6px; overflow: hidden;
+        font-family: 'Courier New', monospace; }
+      #results h2 { background: #1a1f2b; color: #fde047; padding: 10px 16px; font-size: 16px;
+        letter-spacing: 1px; }
+      #results ol { list-style: none; padding: 10px 16px; margin: 0; font-size: 14px; }
+      #results ol li { display: flex; justify-content: space-between; padding: 3px 0;
+        border-bottom: 1px dashed rgba(0,0,0,0.15); }
+      #results ol li.you { color: #b91c1c; font-weight: 700; }
+      #results ol li .rank { width: 24px; }
+      #results ol li .who { flex: 1; }
+      #results .stats { background: #b7bcc6; padding: 12px 16px; display: grid;
+        grid-template-columns: 1fr 1fr; gap: 4px 20px; font-size: 15px; font-weight: 700; }
+      #results .stats b { color: #05070c; }
+      #results .ractions { display: flex; padding: 12px 16px; gap: 10px; justify-content: center; }
+      #results button { font: inherit; font-weight: 700; font-size: 15px; padding: 10px 22px;
+        background: #e2e5ea; border: 2px solid #05070c; border-radius: 5px; cursor: pointer; }
+      #results button:hover { background: #fff; }
     </style>
   </head>
   <body>
     <div id="app"></div>
 
-    <div id="title" class="hud">three.js raycast vehicle</div>
-
-    <div id="help" class="hud">
-      <div class="keyboard-controls">
-        <div><b>WASD</b><span>Drive</span></div>
-        <div><b>Shift</b><span>Boost</span></div>
-        <div><b>Space</b><span>Jump</span></div>
-        <div><b>R</b><span>Reset</span></div>
-        <div><b>Drag</b><span>Camera</span></div>
-        <div><b>.</b><span>Tuning panel</span></div>
+    <div id="menu">
+      <div class="card">
+        <h1>STUNTS<span>Web Port</span></h1>
+        <label for="menu-track">Track</label>
+        <select id="menu-track"></select>
+        <div class="meta">Horizon: <b id="menu-horizon">—</b> · <b id="menu-tiles">0</b> tiles</div>
+        <label for="menu-car">Car</label>
+        <select id="menu-car"></select>
+        <div class="meta" id="menu-car-stats">—</div>
+        <label for="menu-driver">Driver</label>
+        <select id="menu-driver"></select>
+        <div class="meta" id="menu-driver-bio">—</div>
+        <label>Car color</label>
+        <div id="menu-colors"></div>
+        <button id="menu-drive">Let's Drive ▸</button>
+        <div class="foot">WASD / arrows to drive · Shift boost · Space jump · R respawn · C cockpit</div>
       </div>
-      <div class="touch-controls">
-        <div><b>Joystick</b><span>Drive</span></div>
-        <div><b>⚡ Button</b><span>Boost</span></div>
+      <div class="preview-hint">bird's-eye preview</div>
+    </div>
+
+    <button id="open-menu" class="hidden">☰ Menu</button>
+    <button id="view-btn" class="hidden">◉ Chase</button>
+
+    <div id="wrong-way" class="hidden">⚠ WRONG WAY</div>
+
+    <div id="results" class="hidden">
+      <div class="rcard">
+        <h2>Fastest times · <span id="results-track">—</span></h2>
+        <ol id="results-list"></ol>
+        <div class="stats">
+          <div>Lap time: <b id="rs-time">—</b></div>
+          <div>Top speed: <b id="rs-top">0</b> km/h</div>
+          <div>Avg speed: <b id="rs-avg">0</b> km/h</div>
+          <div>Jumps: <b id="rs-jumps">0</b></div>
+        </div>
+        <div class="ractions">
+          <button id="results-continue">Continue ▸</button>
+        </div>
       </div>
     </div>
 
-    <div id="ui-buttons">
-      <button id="help-toggle" class="ui-btn" type="button" aria-label="Show controls">?</button>
-      <button id="fullscreen-toggle" class="ui-btn" type="button" aria-label="Toggle fullscreen">
-        <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" />
-        </svg>
-        <svg class="icon-compress" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3" />
-        </svg>
-      </button>
+    <div id="panel">
+      <h1>Stunts · Web Port</h1>
+      <div class="row">Track: <b id="track-name">demo loop</b></div>
+      <div class="row">Horizon: <b id="horizon-name">—</b></div>
+      <div class="row">Tiles: <b id="tile-count">0</b></div>
+      <select id="track-select" title="Pick a bundled community track"></select>
+      <label for="trk-file">Load .TRK from disk…</label>
+      <input id="trk-file" type="file" accept=".trk,.TRK" />
+      <div class="section-label">Car color</div>
+      <div id="car-colors"></div>
+      <div class="hint">WASD / arrows to drive · Shift boost · Space jump · R respawn · C cockpit</div>
     </div>
 
-    <div id="speed" class="hud">
-      <div class="value">0</div>
-      <div class="unit">speed</div>
+    <div id="opp-hint" class="hidden">◄ Opponent Near</div>
+
+    <div id="timer" class="idle">
+      <small id="timer-label">TIME</small>
+      <span id="timer-value">0:00.000</span>
+      <div id="lap-info" class="hidden">Lap <b id="lap-count">1</b> · Best <span id="best-lap">—</span></div>
     </div>
 
-    <div id="mobile-controls">
-      <button id="mobile-reset" type="button" aria-label="Reset car">Reset</button>
-      <div id="mobile-joystick">
-        <div class="stick"></div>
-      </div>
-      <button id="mobile-boost" type="button" aria-label="Boost">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M13 2 4 14h6l-1 8 10-13h-6l0-7z" />
-        </svg>
-      </button>
+    <div id="speed"><b id="speed-value">0</b><span>km/h</span></div>
+
+    <div id="position"><b id="pos-value">1st</b><span> / 2</span></div>
+
+    <button id="sound-btn" title="Toggle sound">🔊</button>
+
+    <div id="cockpit" class="hidden">
+      <div class="roof"></div>
+      <div class="pillar left"></div>
+      <div class="pillar right"></div>
+      <div class="dash"></div>
+      <div class="wheel"></div>
+      <div class="gauge"><b id="cockpit-speed">0</b><small>km/h</small></div>
     </div>
 
-    <script type="module" src="/src/main.js"></script>
+    <svg id="crack"></svg>
+
+    <script type="module" src="/src/stunts/main.js"></script>
   </body>
 </html>

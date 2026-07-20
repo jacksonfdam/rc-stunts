@@ -1,17 +1,18 @@
 # Raycast RC Car — with a Stunts (1990) web port
 
-Play the live demo: <https://raycast-rc-car.netlify.app/>
-
 [![Raycast vehicle demo](src/assets/demo.jpg)](https://raycast-rc-car.netlify.app/)
 
-Interactive arcade RC car sample built with [three.js](https://threejs.org) and
-[cannon-es](https://github.com/pmndrs/cannon-es). The car uses a
-`CANNON.RaycastVehicle` chassis with GLB visuals, a GLB driving level,
-post-processing effects, mobile, desktop, and browser Gamepad API controls,
-plus a live tuning panel.
+I loved the [Raycast RC Car demo](https://raycast-rc-car.netlify.app/) by
+[icurtis1](https://github.com/icurtis1/raycast-vehicle) and decided to build a
+small **web port of [Stunts (1990)](https://en.wikipedia.org/wiki/Stunts_(video_game))**
+on top of it.
 
-On top of that engine there is a second, standalone entry: a **web port of
-[Stunts (1990)](https://en.wikipedia.org/wiki/Stunts_(video_game))**. It parses
+The base is an interactive arcade RC car built with [three.js](https://threejs.org)
+and [cannon-es](https://github.com/pmndrs/cannon-es): a `CANNON.RaycastVehicle`
+chassis with GLB visuals, a GLB driving level, post-processing effects, mobile,
+desktop, and browser Gamepad API controls, plus a live tuning panel.
+
+The Stunts port is a second, standalone entry that reuses that engine. It parses
 the original `.TRK` track files, rebuilds each track as drivable 3D geometry
 (ramps, elevated bridges, loops, corners), and lets you race an AI opponent
 through the classic car and driver roster.
@@ -32,8 +33,8 @@ npm run dev
 
 Then open:
 
-- <http://localhost:5173/> — the arcade RC playground (`index.html`)
-- <http://localhost:5173/stunts.html> — the Stunts web port
+- <http://localhost:5173/> — the Stunts web port (`index.html`)
+- <http://localhost:5173/play.html> — the arcade RC playground
 
 Both pages share the same `src/` engine (`Vehicle.js`, `World.js`) but have
 independent main scripts, so the build is multipage — see `vite.config.js`.
@@ -67,7 +68,7 @@ is hidden on touch devices.
 | A (bottom button) | Jump |
 | B / right bumper | Boost |
 
-## The Stunts web port (`stunts.html`)
+## The Stunts web port (`index.html`)
 
 A recreation of the classic *Stunts / 4D Sports Driving* experience on top of
 the same raycast-vehicle engine.
@@ -153,9 +154,9 @@ Defaults live in `DEFAULT_PARAMS` at the top of `src/Vehicle.js`. Highlights:
 ## Project structure
 
 ```
-index.html            Arcade playground: HUD, mobile controls, styles
-stunts.html           Stunts web port: menu, results screen, styles
-vite.config.js        Multipage build (index.html + stunts.html)
+index.html            Stunts web port: menu, results screen, styles (served at /)
+play.html             Arcade playground: HUD, mobile controls, styles
+vite.config.js        Multipage build (index.html + play.html)
 public/og-image.jpg   Social share preview image
 src/main.js           Playground: renderer, camera, post, GUI, input, game loop
 src/Vehicle.js        Car physics, controls, visuals, tire marks (shared)
