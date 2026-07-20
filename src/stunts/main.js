@@ -648,17 +648,11 @@ function loadTrack(trackFile, name) {
   if (track) track.dispose()
   track = new StuntsTrack(scene, physicsWorld, trackFile)
 
-  // Spawn just above the start tile, facing along the track (route[0]→route[1])
-  // so the car starts in the correct racing direction, not against it.
-  vehicle.spawnPosition.set(track.start.x, track.start.y + 2, track.start.z)
-  if (track.route && track.route.length >= 2) {
-    const a = track.route[0]
-    const b = track.route[1]
-    const yaw = Math.atan2(b.x - a.x, b.z - a.z) // nose (+Z) → (sin,cos)
-    vehicle.spawnQuaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), yaw)
-  } else {
-    vehicle.spawnQuaternion.set(0, 0, 0, 1)
-  }
+  // Spawn on the first straight tile along the route, facing the racing
+  // direction — never wedged on a corner apex (see StuntsTrack.getSpawn).
+  const spawn = track.getSpawn()
+  vehicle.spawnPosition.set(spawn.position.x, spawn.position.y + 2, spawn.position.z)
+  vehicle.spawnQuaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), spawn.yaw)
   vehicle.respawn()
 
   document.getElementById('track-name').textContent = name
