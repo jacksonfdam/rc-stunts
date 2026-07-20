@@ -1,0 +1,29 @@
+#panel {
+  position: fixed; top: 12px; left: 12px; z-index: 10;
+  background: var(--surface); backdrop-filter: blur(6px);
+  border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 10px;
+  padding: 12px 14px; font-size: 13px; line-height: 1.5; max-width: 260px;
+}
+#panel h1 { font-size: 15px; margin-bottom: 6px; }
+#panel .row { color: var(--muted); }
+#panel .row b { color: var(--text); font-weight: 700; }
+#panel label {
+  display: inline-block; margin-top: 10px; cursor: pointer;
+  background: #2563eb; color: #fff; padding: 6px 10px; border-radius: var(--radius); font-weight: 700;
+}
+#panel input[type="file"] { display: none; }
+#panel select {
+  display: block; width: 100%; margin-top: 10px; padding: 6px 8px;
+  background: var(--input-bg); color: var(--text); font: inherit; font-size: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.35); border-radius: var(--radius); cursor: pointer;
+}
+#panel .hint { margin-top: 8px; font-size: 11px; color: var(--faint); }
+#panel .section-label { margin-top: 12px; font-size: 11px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+
+#car-colors { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; align-items: center; }
+#car-colors .swatch { width: 22px; height: 22px; border-radius: 6px; cursor: pointer;
+  border: 2px solid rgba(255,255,255,0.25); }
+#car-colors .swatch.active { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.35); }
+#car-colors input[type="color"] { width: 26px; height: 26px; padding: 0; border: none;
+  background: none; cursor: pointer; }

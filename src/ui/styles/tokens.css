@@ -1,0 +1,15 @@
+/* Design tokens shared by the Stunts UI components. Values are the ones that
+   recur across the components; per-component one-offs stay literal. */
+:root {
+  --bg: #0b1020;
+  --text: #e5e7eb;
+  --muted: #94a3b8;
+  --faint: #64748b;
+  --accent: #fde047;
+  --accent-amber: #fbbf24;
+  --surface: rgba(15, 23, 42, 0.82);
+  --input-bg: #0f172a;
+  --border: rgba(148, 163, 184, 0.3);
+  --radius: 8px;
+  --font: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+}

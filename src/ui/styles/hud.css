@@ -1,0 +1,33 @@
+#speed {
+  position: fixed; bottom: 16px; right: 20px; z-index: 10;
+  font-weight: 800; font-size: 40px; text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+}
+#speed span { font-size: 16px; color: var(--muted); margin-left: 4px; }
+
+#position { position: fixed; bottom: 16px; left: 20px; z-index: 10;
+  font-weight: 800; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
+#position b { font-size: 40px; color: var(--accent); }
+#position span { font-size: 16px; color: var(--muted); }
+
+#timer {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 10;
+  font-variant-numeric: tabular-nums; font-weight: 800; font-size: 34px;
+  letter-spacing: 1px; color: var(--accent); text-shadow: 0 2px 8px rgba(0,0,0,0.7);
+}
+#timer.idle #timer-value { color: var(--muted); }
+#timer small { display: block; text-align: center; font-size: 11px;
+  font-weight: 700; letter-spacing: 2px; color: var(--muted); text-shadow: none; }
+#lap-info { text-align: center; margin-top: 2px; font-size: 13px; font-weight: 700;
+  color: #cbd5e1; text-shadow: 0 1px 4px rgba(0,0,0,0.7); }
+#lap-info b { color: #34d399; }
+#lap-info.hidden { display: none; }
+
+#opp-hint { position: fixed; top: 46%; left: 50%; transform: translateX(-50%); z-index: 9;
+  font-weight: 800; font-size: 22px; letter-spacing: 1px; color: #f8fafc;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.85); pointer-events: none; }
+
+#wrong-way { position: fixed; top: 22%; left: 50%; transform: translateX(-50%); z-index: 9;
+  font-weight: 800; font-size: 26px; letter-spacing: 1px; color: #fca5a5;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.85); pointer-events: none;
+  animation: wwblink 0.7s steps(2, start) infinite; }
+@keyframes wwblink { 50% { opacity: 0.35; } }
