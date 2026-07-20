@@ -12,6 +12,7 @@ import {
 } from '../ui/tuning/sections.js'
 import { createColorSwatches } from '../ui/molecules/ColorSwatches.js'
 import { createResultsScreen } from '../ui/organisms/ResultsScreen.js'
+import { createHud } from '../ui/organisms/Hud.js'
 
 import {
   Vehicle,
@@ -200,7 +201,7 @@ const physicsDebug = createPhysicsDebug(scene, physicsWorld, vehicle)
 // A ghost car that drives the track's route (see StuntsTrack._buildRoute). It's
 // not physics-driven — it advances along the ordered tile-centre path at a fixed
 // pace and orients to its heading, so it reliably completes the circuit.
-const oppHint = document.getElementById('opp-hint')
+const hud = createHud()
 
 function buildOpponentCar() {
   const g = new THREE.Group()
@@ -299,13 +300,10 @@ function updateOpponent(delta) {
   placeOpponent()
 
   const near = opponent.group.position.distanceTo(vehicle.group.position) < TILE * 1.6
-  oppHint.classList.toggle('hidden', !near)
+  hud.setOpponentHint(near)
 }
 
 // --- Race position (you vs the opponent) -------------------------------------
-const posValue = document.getElementById('pos-value')
-const _posP = new THREE.Vector3()
-
 function updatePosition() {
   if (!track || !track.route || track.route.length < 3 || !opponent.active) return
   const route = track.route
@@ -320,7 +318,7 @@ function updatePosition() {
     }
   }
   // Higher route index = further round the lap. (Single-lap approximation.)
-  posValue.textContent = best >= opponent.idx ? '1st' : '2nd'
+  hud.setPosition(best >= opponent.idx ? '1st' : '2nd')
 }
 
 // --- Sound (procedural engine + crash thud, no audio assets) -----------------
@@ -406,12 +404,6 @@ soundBtn.addEventListener('click', () => {
 // the big readout is the current lap, and it records the best lap and lap count
 // each time the car crosses the start tile. Tracks without a start tile fall
 // back to a plain elapsed-time stopwatch.
-const timerEl = document.getElementById('timer')
-const timerValue = document.getElementById('timer-value')
-const timerLabel = document.getElementById('timer-label')
-const lapInfo = document.getElementById('lap-info')
-const lapCountEl = document.getElementById('lap-count')
-const bestLapEl = document.getElementById('best-lap')
 const START_RADIUS = TILE * 0.6 // how close counts as "on" the start tile
 const MIN_LAP_SECONDS = 2 // debounce so one crossing can't count twice
 
@@ -444,10 +436,10 @@ function resetTimer() {
   lapCount = 1
   wasOnStart = true
   resetLapStats()
-  timerEl.classList.add('idle')
-  timerValue.textContent = '0:00.000'
-  lapCountEl.textContent = '1'
-  bestLapEl.textContent = '—'
+  hud.setIdle(true)
+  hud.setTimer('0:00.000')
+  hud.setLapCount(1)
+  hud.setBestLap('—')
 }
 
 function isGrounded() {
@@ -467,7 +459,7 @@ function updateTimer(delta, driving, carPos) {
   if (resultsScreen.isOpen) return // frozen while the results screen is up
   if (!timing && driving) {
     timing = true
-    timerEl.classList.remove('idle')
+    hud.setIdle(false)
   }
   if (!timing) return
   runTime += delta
@@ -489,18 +481,18 @@ function updateTimer(delta, driving, carPos) {
     if (onStart && !wasOnStart && lapElapsed > MIN_LAP_SECONDS) {
       if (lapElapsed < bestLap) {
         bestLap = lapElapsed
-        bestLapEl.textContent = formatTime(bestLap)
+        hud.setBestLap(formatTime(bestLap))
       }
       lapCount++
-      lapCountEl.textContent = String(lapCount)
+      hud.setLapCount(lapCount)
       finishLap(lapElapsed)
       lapStart = runTime
       resetLapStats()
     }
     wasOnStart = onStart
-    timerValue.textContent = formatTime(runTime - lapStart)
+    hud.setTimer(formatTime(runTime - lapStart))
   } else {
-    timerValue.textContent = formatTime(runTime)
+    hud.setTimer(formatTime(runTime))
   }
 }
 
@@ -643,8 +635,8 @@ function loadTrack(trackFile, name) {
   resetTimer()
   resetOpponent()
   // Show lap UI only when the track has a start/finish tile to time against.
-  lapInfo.classList.toggle('hidden', !track.hasStart)
-  timerLabel.textContent = track.hasStart ? 'LAP TIME' : 'TIME'
+  hud.showLapInfo(track.hasStart)
+  hud.setTimerLabel(track.hasStart ? 'LAP TIME' : 'TIME')
 }
 
 loadTrack(createDemoTrackFile(), 'demo loop')
@@ -839,7 +831,6 @@ const menuTrack = document.getElementById('menu-track')
 const menuHorizon = document.getElementById('menu-horizon')
 const menuTiles = document.getElementById('menu-tiles')
 const panelEl = document.getElementById('panel')
-const speedEl = document.getElementById('speed')
 
 function frameBirdview() {
   debug.topView = true
@@ -861,12 +852,8 @@ function openMenu() {
   menuEl.classList.remove('hidden')
   openMenuBtn.classList.add('hidden')
   panelEl.classList.add('hidden')
-  speedEl.classList.add('hidden')
-  timerEl.classList.add('hidden')
-  oppHint.classList.add('hidden')
+  hud.setVisible(false)
   document.getElementById('view-btn').classList.add('hidden')
-  document.getElementById('wrong-way').classList.add('hidden')
-  document.getElementById('position').classList.add('hidden')
   refreshMenuPreview()
 }
 
@@ -874,10 +861,8 @@ function startDriving() {
   menuEl.classList.add('hidden')
   openMenuBtn.classList.remove('hidden')
   panelEl.classList.remove('hidden')
-  speedEl.classList.remove('hidden')
-  timerEl.classList.remove('hidden')
+  hud.setVisible(true)
   document.getElementById('view-btn').classList.remove('hidden')
-  document.getElementById('position').classList.remove('hidden')
   debug.topView = false
   vehicle.respawn()
   resetTimer()
@@ -956,13 +941,12 @@ if (viewBtn) viewBtn.addEventListener('click', cycleCameraMode)
 // --- Wrong-way detection -----------------------------------------------------
 // Compare the car's heading with the route's local forward direction; warn when
 // driving against the track.
-const wrongWayEl = document.getElementById('wrong-way')
 const _wwFwd = new THREE.Vector3()
 
 function updateWrongWay() {
   if (!track || !track.route || track.route.length < 3 || resultsScreen.isOpen ||
       !menuEl.classList.contains('hidden')) {
-    wrongWayEl.classList.add('hidden')
+    hud.setWrongWay(false)
     return
   }
   const route = track.route
@@ -982,7 +966,7 @@ function updateWrongWay() {
   const dot = v.x * _wwFwd.x + v.z * _wwFwd.z
   const onRoute = bestD < (TILE * 1.5) * (TILE * 1.5)
   const wrong = onRoute && speed > 3 && dot < 0
-  wrongWayEl.classList.toggle('hidden', !wrong)
+  hud.setWrongWay(wrong)
 }
 
 function updateCockpit(delta) {
@@ -1185,7 +1169,6 @@ const FIXED_STEP = 1 / 60
 let lastTime = performance.now()
 let fpsElapsed = 0
 let fpsFrames = 0
-const speedValue = document.getElementById('speed-value')
 const cockpitSpeed = document.getElementById('cockpit-speed')
 
 function tick() {
@@ -1221,7 +1204,7 @@ function tick() {
   followShadow(vehicle.group.position.x, vehicle.group.position.z)
 
   const roundedSpeed = Math.round(vehicle.speedKmh)
-  speedValue.textContent = roundedSpeed
+  hud.setSpeed(roundedSpeed)
   cockpitSpeed.textContent = roundedSpeed
   updateWrongWay()
   const driving =
