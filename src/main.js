@@ -3,6 +3,7 @@ import * as CANNON from 'cannon-es'
 import GUI from 'lil-gui'
 import { createPostProcessing, DEFAULT_POST_PARAMS } from './engine/postProcessing.js'
 import { createPhysicsDebug } from './engine/physicsDebug.js'
+import { createShadowController } from './engine/shadow.js'
 import {
   Vehicle,
   DEFAULT_PARAMS,
@@ -136,36 +137,8 @@ const DEFAULT_LIGHTING_PARAMS = {
   sunIntensity: world.sun.intensity,
 }
 
-const shadowParams = {
-  sunX: world.sun.position.x,
-  sunY: world.sun.position.y,
-  sunZ: world.sun.position.z,
-  shadowMapSize: world.sun.shadow.mapSize.x,
-  shadowCameraSize: 80,
-  shadowBias: world.sun.shadow.bias,
-  shadowNormalBias: world.sun.shadow.normalBias,
-  shadowRadius: world.sun.shadow.radius,
-}
-const DEFAULT_SHADOW_PARAMS = { ...shadowParams }
-applyShadowParams()
-
-function applyShadowParams() {
-  world.sun.position.set(shadowParams.sunX, shadowParams.sunY, shadowParams.sunZ)
-  world.sun.shadow.camera.left = -shadowParams.shadowCameraSize
-  world.sun.shadow.camera.right = shadowParams.shadowCameraSize
-  world.sun.shadow.camera.top = shadowParams.shadowCameraSize
-  world.sun.shadow.camera.bottom = -shadowParams.shadowCameraSize
-  world.sun.shadow.bias = shadowParams.shadowBias
-  world.sun.shadow.normalBias = shadowParams.shadowNormalBias
-  world.sun.shadow.radius = shadowParams.shadowRadius
-  world.sun.shadow.camera.updateProjectionMatrix()
-
-  if (world.sun.shadow.mapSize.x !== shadowParams.shadowMapSize) {
-    world.sun.shadow.mapSize.set(shadowParams.shadowMapSize, shadowParams.shadowMapSize)
-    world.sun.shadow.map?.dispose()
-    world.sun.shadow.map = null
-  }
-}
+const { shadowParams, DEFAULT_SHADOW_PARAMS, applyShadowParams, follow: followShadow } =
+  createShadowController(world.sun, { shadowCameraSize: 80 })
 
 const physicsDebug = createPhysicsDebug(scene, physicsWorld, vehicle)
 physicsDebug.setVisible(vehicle.debugParams.physics)
@@ -1059,19 +1032,7 @@ function tick() {
   physicsDebug.update()
 
   // Keep the shadow camera centered on the car so shadows follow it.
-  // Snap the follow point to shadow-map texel increments: moving the shadow
-  // camera by sub-texel amounts re-rasterizes every edge each frame, which
-  // shows up as crawling/shimmering shadow edges while driving.
-  const shadowTexelWorld = (shadowParams.shadowCameraSize * 2) / shadowParams.shadowMapSize
-  const shadowFollowX = Math.round(vehicle.group.position.x / shadowTexelWorld) * shadowTexelWorld
-  const shadowFollowZ = Math.round(vehicle.group.position.z / shadowTexelWorld) * shadowTexelWorld
-  world.sun.position.set(
-    shadowFollowX + shadowParams.sunX,
-    shadowParams.sunY,
-    shadowFollowZ + shadowParams.sunZ
-  )
-  world.sun.target.position.set(shadowFollowX, 0, shadowFollowZ)
-  world.sun.target.updateMatrixWorld()
+  followShadow(vehicle.group.position.x, vehicle.group.position.z)
 
   speedElement.textContent = Math.round(vehicle.speedKmh)
   const boosting = vehicle.input.boost || vehicle.input.gamepadBoost

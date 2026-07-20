@@ -3,6 +3,7 @@ import * as CANNON from 'cannon-es'
 import GUI from 'lil-gui'
 import { createPostProcessing, DEFAULT_POST_PARAMS } from '../engine/postProcessing.js'
 import { createPhysicsDebug } from '../engine/physicsDebug.js'
+import { createShadowController } from '../engine/shadow.js'
 
 import {
   Vehicle,
@@ -176,42 +177,14 @@ physicsWorld.defaultContactMaterial.friction = 0.3
 
 const vehicle = new Vehicle(scene, physicsWorld)
 
-// --- Lighting / shadow tunables ----------------------------------------------
 // sunX/Y/Z are the sun's offset from the car (the shadow frustum follows the
 // car each frame — see tick()).
 const DEFAULT_LIGHTING_PARAMS = {
   ambientIntensity: hemi.intensity,
   sunIntensity: sun.intensity,
 }
-const shadowParams = {
-  sunX: 60,
-  sunY: 90,
-  sunZ: 30,
-  shadowMapSize: sun.shadow.mapSize.x,
-  shadowCameraSize: TILE * 4,
-  shadowBias: sun.shadow.bias,
-  shadowNormalBias: sun.shadow.normalBias,
-  shadowRadius: sun.shadow.radius,
-}
-const DEFAULT_SHADOW_PARAMS = { ...shadowParams }
-
-function applyShadowParams() {
-  sun.shadow.camera.left = -shadowParams.shadowCameraSize
-  sun.shadow.camera.right = shadowParams.shadowCameraSize
-  sun.shadow.camera.top = shadowParams.shadowCameraSize
-  sun.shadow.camera.bottom = -shadowParams.shadowCameraSize
-  sun.shadow.bias = shadowParams.shadowBias
-  sun.shadow.normalBias = shadowParams.shadowNormalBias
-  sun.shadow.radius = shadowParams.shadowRadius
-  sun.shadow.camera.updateProjectionMatrix()
-
-  if (sun.shadow.mapSize.x !== shadowParams.shadowMapSize) {
-    sun.shadow.mapSize.set(shadowParams.shadowMapSize, shadowParams.shadowMapSize)
-    sun.shadow.map?.dispose()
-    sun.shadow.map = null
-  }
-}
-applyShadowParams()
+const { shadowParams, DEFAULT_SHADOW_PARAMS, applyShadowParams, follow: followShadow } =
+  createShadowController(sun, { sunX: 60, sunY: 90, sunZ: 30, shadowCameraSize: TILE * 4 })
 
 const physicsDebug = createPhysicsDebug(scene, physicsWorld, vehicle)
 
@@ -1399,18 +1372,8 @@ function tick() {
   // Fog would hide the whole track from the high top-down camera.
   scene.fog = debug.topView ? null : sceneFog
 
-  // Keep the sun/shadow frustum centred on the car. Snap the follow point to
-  // shadow-map texel increments so shadow edges don't shimmer while driving.
-  const shadowTexelWorld = (shadowParams.shadowCameraSize * 2) / shadowParams.shadowMapSize
-  const shadowFollowX = Math.round(vehicle.group.position.x / shadowTexelWorld) * shadowTexelWorld
-  const shadowFollowZ = Math.round(vehicle.group.position.z / shadowTexelWorld) * shadowTexelWorld
-  sun.position.set(
-    shadowFollowX + shadowParams.sunX,
-    shadowParams.sunY,
-    shadowFollowZ + shadowParams.sunZ
-  )
-  sun.target.position.set(shadowFollowX, 0, shadowFollowZ)
-  sun.target.updateMatrixWorld()
+  // Keep the sun/shadow frustum centred on the car.
+  followShadow(vehicle.group.position.x, vehicle.group.position.z)
 
   const roundedSpeed = Math.round(vehicle.speedKmh)
   speedValue.textContent = roundedSpeed
