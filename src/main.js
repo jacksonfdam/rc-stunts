@@ -1,11 +1,7 @@
 import * as THREE from 'three'
 import * as CANNON from 'cannon-es'
 import GUI from 'lil-gui'
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
-import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js'
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
+import { createPostProcessing, DEFAULT_POST_PARAMS } from './engine/postProcessing.js'
 import {
   Vehicle,
   DEFAULT_PARAMS,
@@ -101,152 +97,13 @@ const camera = new THREE.PerspectiveCamera(
 )
 camera.position.set(0, 6, -10)
 
-const DEFAULT_POST_PARAMS = {
-  enabled: true,
-  aoEnabled: false,
-  aoIntensity: 1.5,
-  aoRadius: 2,
-  // When on, scales the AO kernel with on-screen size instead of a fixed
-  // world-space distance (helps when object scales vary wildly).
-  aoScreenSpaceRadius: false,
-  exposure: 1,
-  contrast: 1,
-  brightness: 0,
-  saturation: 1.1,
-  vignetteStrength: 1,
-  vignetteRadius: 0.24,
-  noiseAmount: 0,
-  chromaticAberration: 0.0014,
-  windLinesStrength: 0.35,
-  windLinesMinSpeedKmh: 110,
-}
-const BOOST_POST_PARAMS = {
-  vignetteStrength: 1.35,
-  chromaticAberration: 0.012,
-}
 const postParams = { ...DEFAULT_POST_PARAMS }
 let postBoostBlend = 0
 let windLinesBlend = 0
 renderer.toneMapping = THREE.ACESFilmicToneMapping
-renderer.toneMappingExposure = postParams.exposure
 
-const colorGradeShader = {
-  uniforms: {
-    tDiffuse: { value: null },
-    resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
-    time: { value: 0 },
-    contrast: { value: postParams.contrast },
-    brightness: { value: postParams.brightness },
-    saturation: { value: postParams.saturation },
-    vignetteStrength: { value: postParams.vignetteStrength },
-    vignetteRadius: { value: postParams.vignetteRadius },
-    noiseAmount: { value: postParams.noiseAmount },
-    chromaticAberration: { value: postParams.chromaticAberration },
-    windLines: { value: 0 },
-  },
-  vertexShader: `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
-    uniform sampler2D tDiffuse;
-    uniform vec2 resolution;
-    uniform float time;
-    uniform float contrast;
-    uniform float brightness;
-    uniform float saturation;
-    uniform float vignetteStrength;
-    uniform float vignetteRadius;
-    uniform float noiseAmount;
-    uniform float chromaticAberration;
-    uniform float windLines;
-    varying vec2 vUv;
-
-    float random(vec2 st) {
-      return fract(sin(dot(st.xy, vec2(12.9898, 78.233)) + time) * 43758.5453123);
-    }
-
-    float hash(float n) {
-      return fract(sin(n) * 43758.5453123);
-    }
-
-    // Thin radial streaks near the screen edges, racing toward the center.
-    float windStreaks(vec2 uv) {
-      vec2 dir = (uv - 0.5) * vec2(resolution.x / resolution.y, 1.0);
-      float radius = length(dir);
-      float angle = atan(dir.y, dir.x);
-
-      const float LINE_COUNT = 90.0;
-      float slot = angle / 6.2831853 * LINE_COUNT;
-      float bin = floor(slot);
-
-      // Only a sparse, changing subset of angular slots carries a streak
-      float seed = hash(bin * 7.13 + floor(time * 9.0) * 131.7);
-      float streakOn = step(0.82, seed);
-
-      // Thin soft line inside the slot
-      float linePos = abs(fract(slot) - 0.5);
-      float lineMask = smoothstep(0.10, 0.02, linePos);
-
-      // Streak races outward (past the camera) over its lifetime
-      float lifetime = fract(time * 9.0);
-      float head = mix(0.42, 1.05, lifetime * (0.5 + 0.5 * hash(bin * 3.7)));
-      float trail = smoothstep(head - 0.28, head - 0.05, radius) * smoothstep(head + 0.08, head, radius);
-
-      // Keep the middle of the screen clear
-      float edgeMask = smoothstep(0.38, 0.75, radius);
-
-      return streakOn * lineMask * trail * edgeMask;
-    }
-
-    void main() {
-      vec2 center = vec2(0.5);
-      vec2 direction = vUv - center;
-      vec2 aberrationOffset = direction * chromaticAberration;
-
-      vec4 color = texture2D(tDiffuse, vUv);
-      color.r = texture2D(tDiffuse, vUv + aberrationOffset).r;
-      color.b = texture2D(tDiffuse, vUv - aberrationOffset).b;
-
-      color.rgb += brightness;
-      color.rgb = (color.rgb - 0.5) * contrast + 0.5;
-
-      float luminance = dot(color.rgb, vec3(0.299, 0.587, 0.114));
-      color.rgb = mix(vec3(luminance), color.rgb, saturation);
-
-      float dist = distance(vUv, center);
-      float vignette = smoothstep(vignetteRadius, 0.98, dist);
-      color.rgb *= 1.0 - vignette * vignetteStrength;
-
-      float noise = random(vUv * resolution) - 0.5;
-      color.rgb += noise * noiseAmount;
-
-      if (windLines > 0.001) {
-        color.rgb += windStreaks(vUv) * windLines;
-      }
-
-      gl_FragColor = vec4(color.rgb, color.a);
-    }
-  `,
-}
-
-const composer = new EffectComposer(renderer)
-// 4x MSAA for the post-processing chain — without this the composer renders
-// into non-multisampled buffers and all geometry edges alias.
-composer.renderTarget1.samples = 4
-composer.renderTarget2.samples = 4
-const renderPass = new RenderPass(scene, camera)
-const gtaoPass = new GTAOPass(scene, camera, window.innerWidth, window.innerHeight)
-gtaoPass.output = GTAOPass.OUTPUT.Default
-const colorGradePass = new ShaderPass(colorGradeShader)
-const outputPass = new OutputPass()
-composer.addPass(renderPass)
-composer.addPass(gtaoPass)
-composer.addPass(colorGradePass)
-composer.addPass(outputPass)
+const { composer, colorGradePass, applyPostParams, setSize: setPostSize } =
+  createPostProcessing(renderer, scene, camera, postParams)
 
 function applyCameraParams(fovOverride = cameraParams.fov) {
   camera.fov = fovOverride
@@ -254,42 +111,11 @@ function applyCameraParams(fovOverride = cameraParams.fov) {
   camera.updateProjectionMatrix()
 }
 
-function applyPostParams() {
-  const boostedVignette = THREE.MathUtils.lerp(
-    postParams.vignetteStrength,
-    BOOST_POST_PARAMS.vignetteStrength,
-    postBoostBlend
-  )
-  const boostedChromatic = THREE.MathUtils.lerp(
-    postParams.chromaticAberration,
-    BOOST_POST_PARAMS.chromaticAberration,
-    postBoostBlend
-  )
-
-  renderer.toneMappingExposure = postParams.exposure
-  gtaoPass.enabled = postParams.enabled && postParams.aoEnabled
-  gtaoPass.blendIntensity = postParams.aoIntensity
-  gtaoPass.updateGtaoMaterial({
-    radius: postParams.aoRadius,
-    screenSpaceRadius: postParams.aoScreenSpaceRadius,
-  })
-  colorGradePass.enabled = postParams.enabled
-  colorGradePass.uniforms.contrast.value = postParams.contrast
-  colorGradePass.uniforms.brightness.value = postParams.brightness
-  colorGradePass.uniforms.saturation.value = postParams.saturation
-  colorGradePass.uniforms.vignetteStrength.value = boostedVignette
-  colorGradePass.uniforms.vignetteRadius.value = postParams.vignetteRadius
-  colorGradePass.uniforms.noiseAmount.value = postParams.noiseAmount
-  colorGradePass.uniforms.chromaticAberration.value = boostedChromatic
-}
-applyPostParams()
-
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight
   camera.updateProjectionMatrix()
   renderer.setSize(window.innerWidth, window.innerHeight)
-  composer.setSize(window.innerWidth, window.innerHeight)
-  colorGradePass.uniforms.resolution.value.set(window.innerWidth, window.innerHeight)
+  setPostSize(window.innerWidth, window.innerHeight)
 })
 
 // --- Physics -----------------------------------------------------------------
@@ -1384,7 +1210,7 @@ function tick() {
   colorGradePass.uniforms.windLines.value = windLinesBlend * postParams.windLinesStrength
   const boostedFov = THREE.MathUtils.lerp(cameraParams.fov, 72, cameraBoostBlend)
   applyCameraParams(boostedFov)
-  applyPostParams()
+  applyPostParams(postBoostBlend)
   colorGradePass.uniforms.time.value = now * 0.001
 
   if (postParams.enabled) {
