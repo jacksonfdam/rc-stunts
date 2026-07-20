@@ -305,6 +305,10 @@ function initAudio() {
 function updateAudio(driving) {
   if (!audioCtx || !soundOn) return
   const t = audioCtx.currentTime
+  if (resultsOpen) {
+    engineGain.gain.setTargetAtTime(0, t, 0.08) // engine off when the race ends
+    return
+  }
   const spd = vehicle.speedKmh
   const f = 55 + spd * 2.4
   engineOsc.frequency.setTargetAtTime(f, t, 0.06)
@@ -1086,10 +1090,14 @@ function tick() {
   const delta = Math.min((now - lastTime) / 1000, 0.1)
   lastTime = now
 
-  physicsWorld.step(FIXED_STEP, delta, 3)
-  vehicle.update(delta)
-  updateLoopAssist()
-  updateOpponent(delta)
+  // Freeze the whole simulation while the results screen is up (race over) —
+  // the car, opponent, physics and clock all stop.
+  if (!resultsOpen) {
+    physicsWorld.step(FIXED_STEP, delta, 3)
+    vehicle.update(delta)
+    updateLoopAssist()
+    updateOpponent(delta)
+  }
   if (debug.topView) updateTopView()
   else if (debug.freeze) {
     // manual/frozen camera — leave it where it is
