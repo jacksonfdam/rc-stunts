@@ -393,11 +393,25 @@ function playThud() {
   src.start()
 }
 
-soundBtn.addEventListener('click', () => {
-  soundOn = !soundOn
-  soundBtn.textContent = soundOn ? '🔊' : '🔇'
-  if (soundOn) initAudio()
+// Single source of truth for sound on/off, shared by the 🔊 button and the
+// tuning panel's Sound toggle (kept in sync via soundController).
+const audioParams = { sound: soundOn }
+let soundController = null
+
+function setSound(on) {
+  soundOn = on
+  audioParams.sound = on
+  soundBtn.textContent = on ? '🔊' : '🔇'
+  if (on) initAudio()
   else if (engineGain) engineGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05)
+  soundController?.updateDisplay()
+}
+
+soundBtn.addEventListener('click', () => {
+  setSound(!soundOn)
+  // Drop focus so Space/Enter (jump) doesn't re-trigger this button and flip
+  // the sound back on — the bug that made sound impossible to turn off.
+  soundBtn.blur()
 })
 
 // --- Run / lap timer ---------------------------------------------------------
@@ -1141,6 +1155,8 @@ buildVehicleSections(vehicleFolder, p, vehicle)
 
 debugFolder.add(vehicle.debugParams, 'physics').name('Show physics colliders').onChange((visible) => physicsDebug.setVisible(visible))
 debugFolder.add(debug, 'topView').name('Top-down view')
+
+soundController = gui.add(audioParams, 'sound').name('Sound').onChange(setSound)
 
 const actions = {
   respawn: () => vehicle.respawn(),
