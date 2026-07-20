@@ -192,35 +192,28 @@ export class StuntsTrack {
   }
 
   _addRamp(el, center) {
-    const w = TILE * INSET
-    const len = TILE * INSET
-    const pitch = Math.atan2(RAMP_RISE, TILE)
+    // A smooth curved launch/bridge ramp (like the base demo's), swept from the
+    // ground up to ELEV_H with a smoothstep profile so it eases in at the bottom
+    // and out at the top, backed by a trimesh so the car drives up it.
     // Ascent yaw per quadrant, calibrated against the corpus: Q1→E, Q2→N, Q3→W,
-    // Q4→S. This scores 96.7% "ramp ascends toward its raised neighbour" over
-    // 395 unambiguous bridge ramps in 84 tracks (a full dihedral search — a plain
-    // rotation offset couldn't align all four ids). The mesh tilts its +Z end up,
-    // and yaw θ points that end along (sinθ, cosθ).
+    // Q4→S (96.7% of bridge ramps ascend toward their raised neighbour). The
+    // rings' +Z end is the high end; yaw θ points it along (sinθ, cosθ).
     const RAMP_YAW = { 1: Math.PI / 2, 2: 0, 3: (3 * Math.PI) / 2, 4: Math.PI }
     const yaw = RAMP_YAW[el.quadrant] ?? 0
-    const q = new THREE.Quaternion()
-      .setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw)
-      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -pitch))
-
-    const geometry = new THREE.BoxGeometry(w, ROAD_H, len)
-    const mesh = new THREE.Mesh(geometry, this._material(el.color))
-    mesh.position.set(center.x, GROUND_Y + RAMP_RISE / 2, center.z)
-    mesh.quaternion.copy(q)
-    mesh.castShadow = true
-    mesh.receiveShadow = true
-    this.group.add(mesh)
-
-    const body = new CANNON.Body({ mass: 0, material: this.physicsWorld.defaultMaterial })
-    body.addShape(new CANNON.Box(new CANNON.Vec3(w / 2, ROAD_H / 2, len / 2)))
-    body.position.set(mesh.position.x, mesh.position.y, mesh.position.z)
-    body.quaternion.set(q.x, q.y, q.z, q.w)
-    body.updateAABB()
-    this.physicsWorld.addBody(body)
-    this.colliderBodies.push(body)
+    const w = TILE * INSET
+    const len = TILE * INSET
+    const K = 14
+    const rings = []
+    for (let i = 0; i <= K; i++) {
+      const t = i / K
+      const z = -len / 2 + t * len
+      const y = ELEV_H * (t * t * (3 - 2 * t)) + ROAD_H // smoothstep 0→ELEV_H
+      rings.push([
+        [-w / 2, y, z],
+        [w / 2, y, z],
+      ])
+    }
+    this._addSweptSurface(rings, center, yaw, el.color)
   }
 
   _addElevated(el, center) {
