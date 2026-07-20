@@ -41,6 +41,7 @@ import { TrackFile, createDemoTrackFile } from './TrackFile.js'
 import { describeElement } from './trackElements.js'
 import { StuntsTrack, TILE } from './StuntsTrack.js'
 import { GRID } from './TrackFile.js'
+import { TRACK_NAMES } from './trackNames.js'
 
 // Selectable car models (dropped in src/assets, imported as URLs).
 import baseCarUrl from '../assets/base.glb?url'
@@ -561,7 +562,7 @@ function loadTrack(trackFile, name) {
   vehicle.spawnQuaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), spawn.yaw)
   vehicle.respawn()
 
-  document.getElementById('track-name').textContent = name
+  document.getElementById('track-name').textContent = TRACK_NAMES[name] ?? name
   document.getElementById('horizon-name').textContent = trackFile.horizonName
   document.getElementById('tile-count').textContent = countDrivable(trackFile)
   resetTimer()
@@ -583,11 +584,10 @@ const trackSelect = document.getElementById('track-select')
 // bytes are inlined as data URIs, so this "fetch" never hits the network).
 const trackCache = new Map()
 
-// The .TRK format stores no track name — only the 30x30 grid — and the site
-// files were saved under sequential codes (r4k0…), so there's no real name to
-// show. Instead we label each entry with its horizon + drivable tile count,
-// parsed from the file, and group the list by horizon so tracks are easy to
-// tell apart.
+// The .TRK format stores no track name — only the 30x30 grid. Files are saved
+// under their raceforkicks code (r4k0…), so we map codes to the real titles
+// (see trackNames.js) and label each entry "Title · N tiles", grouped by
+// horizon and sorted by title.
 async function buildTrackPicker() {
   const parsed = await Promise.all(
     Object.entries(trackUrls).map(async ([path, url]) => {
@@ -613,13 +613,14 @@ async function buildTrackPicker() {
   for (const horizon of [...byHorizon.keys()].sort()) {
     const group = document.createElement('optgroup')
     group.label = horizon
+    const trackName = (code) => TRACK_NAMES[code] ?? code
     const list = byHorizon
       .get(horizon)
-      .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+      .sort((a, b) => trackName(a.code).localeCompare(trackName(b.code), undefined, { numeric: true }))
     for (const { code, url, tiles } of list) {
       const option = document.createElement('option')
       option.value = url
-      option.textContent = `${code} · ${tiles} tiles`
+      option.textContent = `${trackName(code)} · ${tiles} tiles`
       group.append(option)
     }
     trackSelect.append(group)
