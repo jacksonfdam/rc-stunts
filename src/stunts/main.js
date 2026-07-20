@@ -13,6 +13,7 @@ import {
 import { createColorSwatches } from '../ui/molecules/ColorSwatches.js'
 import { createResultsScreen } from '../ui/organisms/ResultsScreen.js'
 import { createHud } from '../ui/organisms/Hud.js'
+import { createMenu } from '../ui/organisms/Menu.js'
 
 import {
   Vehicle,
@@ -196,6 +197,9 @@ const { shadowParams, DEFAULT_SHADOW_PARAMS, applyShadowParams, follow: followSh
   createShadowController(sun, { sunX: 60, sunY: 90, sunZ: 30, shadowCameraSize: TILE * 4 })
 
 const physicsDebug = createPhysicsDebug(scene, physicsWorld, vehicle)
+
+// Start menu + ☰ button (built in JS; the game populates and wires them below).
+const menu = createMenu()
 
 // --- AI opponent -------------------------------------------------------------
 // A ghost car that drives the track's route (see StuntsTrack._buildRoute). It's
@@ -746,7 +750,7 @@ const carColors = createColorSwatches({
   onChange: (color) => vehicle.setBodyColor(color),
 })
 carColors.mount(document.getElementById('car-colors'))
-carColors.mount(document.getElementById('menu-colors'))
+carColors.mount(menu.colorsContainer)
 
 // --- Car & driver selection --------------------------------------------------
 // A few tuning presets ("cars") that change engine/top speed live, plus flavour
@@ -803,8 +807,8 @@ function applyCar(car, swapModel) {
 }
 
 function buildCarDriverPickers() {
-  const carSel = document.getElementById('menu-car')
-  const carStats = document.getElementById('menu-car-stats')
+  const carSel = menu.carSelect
+  const carStats = menu.carStatsEl
   CARS.forEach((c, i) => {
     const o = document.createElement('option')
     o.value = String(i)
@@ -821,8 +825,8 @@ function buildCarDriverPickers() {
   carSel.addEventListener('change', (e) => showCar(+e.target.value, true))
   showCar(0, false)
 
-  const driverSel = document.getElementById('menu-driver')
-  const driverBio = document.getElementById('menu-driver-bio')
+  const driverSel = menu.driverSelect
+  const driverBio = menu.driverBioEl
   DRIVERS.forEach((d, i) => {
     const o = document.createElement('option')
     o.value = String(i)
@@ -839,11 +843,11 @@ function buildCarDriverPickers() {
 buildCarDriverPickers()
 
 // --- Start menu + bird's-eye preview -----------------------------------------
-const menuEl = document.getElementById('menu')
-const openMenuBtn = document.getElementById('open-menu')
-const menuTrack = document.getElementById('menu-track')
-const menuHorizon = document.getElementById('menu-horizon')
-const menuTiles = document.getElementById('menu-tiles')
+const menuEl = menu.root
+const openMenuBtn = menu.openButton
+const menuTrack = menu.trackSelect
+const menuHorizon = menu.horizonEl
+const menuTiles = menu.tilesEl
 const panelEl = document.getElementById('panel')
 
 function frameBirdview() {
@@ -889,7 +893,7 @@ menuTrack.addEventListener('change', (event) => {
   trackSelect.value = event.target.value
   refreshMenuPreview()
 })
-document.getElementById('menu-drive').addEventListener('click', startDriving)
+menu.driveButton.addEventListener('click', startDriving)
 openMenuBtn.addEventListener('click', openMenu)
 
 // --- Chase camera ------------------------------------------------------------
