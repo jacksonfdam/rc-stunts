@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import * as CANNON from 'cannon-es'
 import GUI from 'lil-gui'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { createPostProcessing, DEFAULT_POST_PARAMS } from '../engine/postProcessing.js'
 import { createPhysicsDebug } from '../engine/physicsDebug.js'
 import { createShadowController } from '../engine/shadow.js'
@@ -122,36 +123,43 @@ const gamepadInput = createGamepadInput(vehicle)
 // pace and orients to its heading, so it reliably completes the circuit.
 const hud = createHud()
 
+const OPP_CAR_LENGTH = 4.6 // world units; roughly the player car's length
+const OPP_CAR_YAW_OFFSET = Math.PI // GTR GLB faces -Z; rotate so its nose is +Z
+
+// The opponent uses a real car GLB (distinct from the player's). Loaded async
+// into the returned group; fitted so its wheels sit at the group origin (y=0)
+// and its nose points +Z, matching placeOpponent's heading — so it sits flush
+// on the road (no float) and faces its direction of travel.
 function buildOpponentCar() {
   const g = new THREE.Group()
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(3.4, 1.1, 6),
-    new THREE.MeshStandardMaterial({ color: 0x2563eb, roughness: 0.4, metalness: 0.1 })
-  )
-  // Modelled with wheel-contact at the group origin (y=0) so placing the group
-  // on the road surface sits it flush (wheel radius 1 → centre at y=1).
-  body.position.y = 1.6
-  body.castShadow = true
-  g.add(body)
-  const cabin = new THREE.Mesh(
-    new THREE.BoxGeometry(2.6, 0.9, 2.6),
-    new THREE.MeshStandardMaterial({ color: 0xdbeafe, roughness: 0.3 })
-  )
-  cabin.position.set(0, 2.4, -0.2)
-  g.add(cabin)
-  const wheelGeo = new THREE.CylinderGeometry(1, 1, 0.8, 12)
-  wheelGeo.rotateZ(Math.PI / 2)
-  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111318, roughness: 0.8 })
-  for (const [x, z] of [[-1.8, 2], [1.8, 2], [-1.8, -2], [1.8, -2]]) {
-    const w = new THREE.Mesh(wheelGeo, wheelMat)
-    w.position.set(x, 1, z)
-    g.add(w)
-  }
+  new GLTFLoader()
+    .loadAsync(gtrUrl)
+    .then((gltf) => {
+      const model = gltf.scene
+      model.traverse((o) => {
+        if (o.isMesh) {
+          o.castShadow = true
+          o.receiveShadow = true
+        }
+      })
+      const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3())
+      model.scale.setScalar(OPP_CAR_LENGTH / Math.max(size.x, size.z))
+      // Re-measure after scaling, then centre X/Z and drop the base to y=0.
+      const box = new THREE.Box3().setFromObject(model)
+      const center = box.getCenter(new THREE.Vector3())
+      model.position.x -= center.x
+      model.position.z -= center.z
+      model.position.y -= box.min.y
+      model.rotation.y = OPP_CAR_YAW_OFFSET
+      g.add(model)
+    })
+    .catch((err) => console.warn('Opponent car model failed to load', err))
   return g
 }
 
 const OPP_START_LEAD = TILE * 1.6 // start ahead of the player so they don't overlap
-const opponent = { group: buildOpponentCar(), idx: 0, t: 0, speed: 21, active: false }
+// speed is world units/sec along the route — higher = tougher to beat.
+const opponent = { group: buildOpponentCar(), idx: 0, t: 0, speed: 30, active: false }
 scene.add(opponent.group)
 opponent.group.visible = false
 const _oppDir = new THREE.Vector3()
