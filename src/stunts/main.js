@@ -124,7 +124,7 @@ const gamepadInput = createGamepadInput(vehicle)
 const hud = createHud()
 
 const OPP_CAR_LENGTH = 4.6 // world units; roughly the player car's length
-const OPP_CAR_YAW_OFFSET = Math.PI // GTR GLB faces -Z; rotate so its nose is +Z
+const OPP_CAR_YAW_OFFSET = 0 // GTR GLB already faces +Z (its travel direction)
 
 // The opponent uses a real car GLB (distinct from the player's). Loaded async
 // into the returned group; fitted so its wheels sit at the group origin (y=0)
