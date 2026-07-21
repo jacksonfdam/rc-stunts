@@ -215,7 +215,10 @@ export class StuntsTrack {
     for (let i = 0; i <= K; i++) {
       const t = i / K
       const z = -len / 2 + t * len
-      const y = ELEV_H * (t * t * (3 - 2 * t)) + ROAD_H // smoothstep 0→ELEV_H
+      // Linear rise so the visual surface matches the straight box collider
+      // exactly — a curved (smoothstep) surface over a flat collider makes the
+      // car look like it floats/bounces along the ramp.
+      const y = ELEV_H * t + ROAD_H
       rings.push([
         [-w / 2, y, z],
         [w / 2, y, z],
