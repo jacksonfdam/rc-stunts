@@ -128,7 +128,7 @@ export class StuntsTrack {
         break
       case CATEGORY.PIPE:
       case CATEGORY.TUNNEL:
-        this._addPipe(el, center)
+        this._addPipe(el, center, x, y)
         break
       // Scenery and buildings are decoration/obstacles that belong off the
       // road. Skip any that abut the drivable path so they never clutter or
@@ -359,7 +359,7 @@ export class StuntsTrack {
     })
   }
 
-  _addPipe(el, center) {
+  _addPipe(el, center, x, y) {
     // A concave half-pipe trough along travel: the floor sits at ground level
     // and curves up into walls, so you drive through it and can ride the sides.
     const R = TILE * 0.5
@@ -375,7 +375,17 @@ export class StuntsTrack {
       cross.map(([x, y]) => [x, y, -half]),
       cross.map(([x, y]) => [x, y, half]),
     ]
-    this._addSweptSurface(rings, center, this._yaw(el.orient), el.color)
+    // Run the trough along the actual road direction (from drivable neighbours)
+    // rather than the file's stored orientation, which often leaves it sideways
+    // so the car slams into a wall. Local sweep is along +Z (world Z / grid-y),
+    // so a north–south run is yaw 0 and an east–west run is a quarter turn.
+    const ns = this._drivableAt(x, y + 1) || this._drivableAt(x, y - 1)
+    const ew = this._drivableAt(x + 1, y) || this._drivableAt(x - 1, y)
+    let yaw
+    if (ns && !ew) yaw = 0
+    else if (ew && !ns) yaw = Math.PI / 2
+    else yaw = this._yaw(el.orient) // ambiguous (junction/none) → trust the file
+    this._addSweptSurface(rings, center, yaw, el.color)
   }
 
   _addScenery(el, center) {
