@@ -364,7 +364,9 @@ export class StuntsTrack {
     // and curves up into walls, so you drive through it and can ride the sides.
     const R = TILE * 0.5
     const half = (TILE * INSET) / 2
-    const PHI = 2.15 // half-arc of the trough (radians up each wall)
+    // Shallow half-arc so the trough reads as a long, low tube (wider/longer
+    // than tall) you drive through — not a tall narrow ring you slam into.
+    const PHI = 1.1 // half-arc of the trough (radians up each wall)
     const M = 11
     const cross = []
     for (let j = 0; j < M; j++) {
