@@ -253,18 +253,26 @@ export class StuntsTrack {
   }
 
   _addElevated(el, center) {
-    // A raised bridge span: an earthen support block up to ELEV_H (matching the
-    // ramps' brown), with a paved road cap on top. The top sits at ELEV_H so a
-    // ramp's high end meets it flush.
+    // A raised bridge span: a paved road deck on slim corner pillars (like the
+    // original's elevated roads) rather than a solid earthen block, which reads
+    // as a massive wall in front of ramps. The deck top sits at ELEV_H so a
+    // ramp's high end meets it flush. The collider stays a full solid box, so
+    // driving is unchanged — only the look is lighter.
     const w = TILE * INSET
-    const support = new THREE.Mesh(
-      new THREE.BoxGeometry(w, ELEV_H, w),
-      this._material(0x6d5a34)
-    )
-    support.position.set(center.x, GROUND_Y + ELEV_H / 2, center.z)
-    support.castShadow = true
-    support.receiveShadow = true
-    this.group.add(support)
+    const pillarW = TILE * 0.16
+    const off = w / 2 - pillarW / 2 - 1
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const pillar = new THREE.Mesh(
+          new THREE.BoxGeometry(pillarW, ELEV_H, pillarW),
+          this._material(0x6d5a34)
+        )
+        pillar.position.set(center.x + sx * off, GROUND_Y + ELEV_H / 2, center.z + sz * off)
+        pillar.castShadow = true
+        pillar.receiveShadow = true
+        this.group.add(pillar)
+      }
+    }
 
     const cap = new THREE.Mesh(
       new THREE.BoxGeometry(w, ROAD_H, w),
