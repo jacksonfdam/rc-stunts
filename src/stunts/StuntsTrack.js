@@ -119,9 +119,14 @@ export class StuntsTrack {
       case CATEGORY.RAMP:
         this._addRamp(el, center)
         break
+      // A lone raised tile (no elevated neighbour or ramp to reach it) is a
+      // generation artifact — a "lost" tall block stranded mid-track that you
+      // can only jump onto and clip through. Render it as flush road instead;
+      // real bridges (a connected run, reached by ramps) stay elevated.
       case CATEGORY.ELEVATED:
       case CATEGORY.ELEVATED_CORNER:
-        this._addElevated(el, center)
+        if (this._hasElevatedOrRampNeighbour(x, y)) this._addElevated(el, center)
+        else this._addFlat(el, center, x, y)
         break
       case CATEGORY.LOOP:
         this._addLoop(el, center, x, y)
@@ -499,6 +504,17 @@ export class StuntsTrack {
   _drivableAt(x, y) {
     if (x < 0 || x >= GRID || y < 0 || y >= GRID) return false
     return describeElement(this.trackFile.trackAt(x, y)).drivable
+  }
+
+  /** True if a neighbour is elevated or a ramp — i.e. this raised tile is part
+   * of a reachable bridge rather than a stranded lone block. */
+  _hasElevatedOrRampNeighbour(x, y) {
+    const raised = (nx, ny) => {
+      if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) return false
+      const c = describeElement(this.trackFile.trackAt(nx, ny)).category
+      return c === CATEGORY.ELEVATED || c === CATEGORY.ELEVATED_CORNER || c === CATEGORY.RAMP
+    }
+    return raised(x + 1, y) || raised(x - 1, y) || raised(x, y + 1) || raised(x, y - 1)
   }
 
   /** True if any orthogonal neighbour is drivable — i.e. the tile abuts the road. */
