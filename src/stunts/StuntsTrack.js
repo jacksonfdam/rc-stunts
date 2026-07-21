@@ -119,22 +119,30 @@ export class StuntsTrack {
       case CATEGORY.RAMP:
         this._addRamp(el, center)
         break
+      // A lone raised tile (no elevated neighbour or ramp to reach it) is a
+      // generation artifact — a "lost" tall block stranded mid-track that you
+      // can only jump onto and clip through. Render it as flush road instead;
+      // real bridges (a connected run, reached by ramps) stay elevated.
       case CATEGORY.ELEVATED:
       case CATEGORY.ELEVATED_CORNER:
-        this._addElevated(el, center)
+        if (this._hasElevatedOrRampNeighbour(x, y)) this._addElevated(el, center)
+        else this._addFlat(el, center, x, y)
         break
       case CATEGORY.LOOP:
         this._addLoop(el, center, x, y)
         break
       case CATEGORY.PIPE:
       case CATEGORY.TUNNEL:
-        this._addPipe(el, center)
+        this._addPipe(el, center, x, y)
         break
+      // Scenery and buildings are decoration/obstacles that belong off the
+      // road. Skip any that abut the drivable path so they never clutter or
+      // sit "in the middle of" the track.
       case CATEGORY.SCENERY:
-        this._addScenery(el, center)
+        if (!this._touchesRoad(x, y)) this._addScenery(el, center)
         break
       case CATEGORY.BUILDING:
-        this._addBuilding(el, center)
+        if (!this._touchesRoad(x, y)) this._addBuilding(el, center)
         break
       // ROAD, CORNER, JUNCTION, CHICANE, BANKED, START, FILLER, HIGHWAY,
       // CORKSCREW — flush road; convex outer corners are rounded from the
@@ -207,28 +215,43 @@ export class StuntsTrack {
     for (let i = 0; i <= K; i++) {
       const t = i / K
       const z = -len / 2 + t * len
-      const y = ELEV_H * (t * t * (3 - 2 * t)) + ROAD_H // smoothstep 0→ELEV_H
+      // Linear rise so the visual surface matches the straight box collider
+      // exactly — a curved (smoothstep) surface over a flat collider makes the
+      // car look like it floats/bounces along the ramp.
+      const y = ELEV_H * t + ROAD_H
       rings.push([
         [-w / 2, y, z],
         [w / 2, y, z],
       ])
     }
+    // Trimesh collider that matches the (now linear) surface exactly — the same
+    // approach the base playground uses for its ramps. The wheels raycast onto
+    // it and ride up; a solid tilted box instead made the car penetrate and get
+    // flung apart on contact.
     this._addSweptSurface(rings, center, yaw, el.color)
   }
 
   _addElevated(el, center) {
-    // A raised bridge span: an earthen support block up to ELEV_H (matching the
-    // ramps' brown), with a paved road cap on top. The top sits at ELEV_H so a
-    // ramp's high end meets it flush.
+    // A raised bridge span: a paved road deck on slim corner pillars (like the
+    // original's elevated roads) rather than a solid earthen block, which reads
+    // as a massive wall in front of ramps. The deck top sits at ELEV_H so a
+    // ramp's high end meets it flush. The collider stays a full solid box, so
+    // driving is unchanged — only the look is lighter.
     const w = TILE * INSET
-    const support = new THREE.Mesh(
-      new THREE.BoxGeometry(w, ELEV_H, w),
-      this._material(0x6d5a34)
-    )
-    support.position.set(center.x, GROUND_Y + ELEV_H / 2, center.z)
-    support.castShadow = true
-    support.receiveShadow = true
-    this.group.add(support)
+    const pillarW = TILE * 0.16
+    const off = w / 2 - pillarW / 2 - 1
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const pillar = new THREE.Mesh(
+          new THREE.BoxGeometry(pillarW, ELEV_H, pillarW),
+          this._material(0x6d5a34)
+        )
+        pillar.position.set(center.x + sx * off, GROUND_Y + ELEV_H / 2, center.z + sz * off)
+        pillar.castShadow = true
+        pillar.receiveShadow = true
+        this.group.add(pillar)
+      }
+    }
 
     const cap = new THREE.Mesh(
       new THREE.BoxGeometry(w, ROAD_H, w),
@@ -252,7 +275,7 @@ export class StuntsTrack {
    * yawed about Y and translated to `center`, and the world coordinates are
    * baked into both the geometry and the trimesh so the collider is exact.
    */
-  _addSweptSurface(rings, center, yaw, color) {
+  _addSweptSurface(rings, center, yaw, color, { collide = true } = {}) {
     const cos = Math.cos(yaw)
     const sin = Math.sin(yaw)
     const K = rings.length
@@ -293,6 +316,7 @@ export class StuntsTrack {
     mesh.receiveShadow = true
     this.group.add(mesh)
 
+    if (!collide) return
     const trimesh = new CANNON.Trimesh(Array.from(positions), indices)
     const body = new CANNON.Body({ mass: 0, material: this.physicsWorld.defaultMaterial })
     body.addShape(trimesh)
@@ -356,12 +380,14 @@ export class StuntsTrack {
     })
   }
 
-  _addPipe(el, center) {
+  _addPipe(el, center, x, y) {
     // A concave half-pipe trough along travel: the floor sits at ground level
     // and curves up into walls, so you drive through it and can ride the sides.
     const R = TILE * 0.5
     const half = (TILE * INSET) / 2
-    const PHI = 2.15 // half-arc of the trough (radians up each wall)
+    // Shallow half-arc so the trough reads as a long, low tube (wider/longer
+    // than tall) you drive through — not a tall narrow ring you slam into.
+    const PHI = 1.1 // half-arc of the trough (radians up each wall)
     const M = 11
     const cross = []
     for (let j = 0; j < M; j++) {
@@ -372,7 +398,17 @@ export class StuntsTrack {
       cross.map(([x, y]) => [x, y, -half]),
       cross.map(([x, y]) => [x, y, half]),
     ]
-    this._addSweptSurface(rings, center, this._yaw(el.orient), el.color)
+    // Run the trough along the actual road direction (from drivable neighbours)
+    // rather than the file's stored orientation, which often leaves it sideways
+    // so the car slams into a wall. Local sweep is along +Z (world Z / grid-y),
+    // so a north–south run is yaw 0 and an east–west run is a quarter turn.
+    const ns = this._drivableAt(x, y + 1) || this._drivableAt(x, y - 1)
+    const ew = this._drivableAt(x + 1, y) || this._drivableAt(x - 1, y)
+    let yaw
+    if (ns && !ew) yaw = 0
+    else if (ew && !ns) yaw = Math.PI / 2
+    else yaw = this._yaw(el.orient) // ambiguous (junction/none) → trust the file
+    this._addSweptSurface(rings, center, yaw, el.color)
   }
 
   _addScenery(el, center) {
@@ -452,6 +488,8 @@ export class StuntsTrack {
   _findStart() {
     let firstDrivable = null
     let firstCell = null
+    let firstStraight = null
+    let firstStraightCell = null
     for (let y = 0; y < GRID; y++) {
       for (let x = 0; x < GRID; x++) {
         const el = describeElement(this.trackFile.trackAt(x, y))
@@ -467,15 +505,42 @@ export class StuntsTrack {
           firstDrivable = pos
           firstCell = { x, y }
         }
+        // A straight tile makes a far better start/finish than a corner, so
+        // tracks without a real start piece anchor on the first one found.
+        if (!firstStraight && el.category === CATEGORY.ROAD) {
+          firstStraight = pos
+          firstStraightCell = { x, y }
+        }
       }
     }
-    this.startCell = firstCell ?? { x: 15, y: 15 }
-    return firstDrivable ?? new THREE.Vector3(0, 3, 0)
+    this.startCell = firstStraightCell ?? firstCell ?? { x: 15, y: 15 }
+    return firstStraight ?? firstDrivable ?? new THREE.Vector3(0, 3, 0)
   }
 
   _drivableAt(x, y) {
     if (x < 0 || x >= GRID || y < 0 || y >= GRID) return false
     return describeElement(this.trackFile.trackAt(x, y)).drivable
+  }
+
+  /** True if a neighbour is elevated or a ramp — i.e. this raised tile is part
+   * of a reachable bridge rather than a stranded lone block. */
+  _hasElevatedOrRampNeighbour(x, y) {
+    const raised = (nx, ny) => {
+      if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) return false
+      const c = describeElement(this.trackFile.trackAt(nx, ny)).category
+      return c === CATEGORY.ELEVATED || c === CATEGORY.ELEVATED_CORNER || c === CATEGORY.RAMP
+    }
+    return raised(x + 1, y) || raised(x - 1, y) || raised(x, y + 1) || raised(x, y - 1)
+  }
+
+  /** True if any orthogonal neighbour is drivable — i.e. the tile abuts the road. */
+  _touchesRoad(x, y) {
+    return (
+      this._drivableAt(x + 1, y) ||
+      this._drivableAt(x - 1, y) ||
+      this._drivableAt(x, y + 1) ||
+      this._drivableAt(x, y - 1)
+    )
   }
 
   _tileHeight(x, y) {
