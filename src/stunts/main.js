@@ -765,17 +765,48 @@ const menuHorizon = menu.horizonEl
 const menuTiles = menu.tilesEl
 const panelEl = document.getElementById('panel')
 
-function frameBirdview() {
-  debug.topView = true
-  debug.freeze = false
-  debug.topX = 0
-  debug.topZ = 0
-  debug.topY = 690 // high enough to see the whole 30×30 grid
+// Menu backdrop: a ghost car cruises the loaded track with a cinematic chase
+// camera, so the menu plays over live driving footage instead of a static map.
+let attractActive = false
+const _attractPos = new THREE.Vector3()
+const _attractLook = new THREE.Vector3()
+const _attractTarget = new THREE.Vector3()
+
+function startAttract() {
+  if (!track || !track.route || track.route.length < 3) {
+    attractActive = false
+    return
+  }
+  attractActive = true
+  debug.topView = false
+  opponent.active = true
+  opponent.idx = 0
+  opponent.t = 0
+  opponent.group.visible = true
+  placeOpponent()
+  vehicle.group.visible = false // hide the parked player car; show the cruiser
+  _attractTarget.copy(opponent.group.position)
+}
+
+function stopAttract() {
+  attractActive = false
+  vehicle.group.visible = true
+}
+
+function updateAttract(delta) {
+  advanceOpponent(opponent.speed * delta)
+  placeOpponent()
+  const g = opponent.group
+  _attractPos.set(0, 6, -13).applyQuaternion(g.quaternion).add(g.position)
+  camera.position.lerp(_attractPos, 1 - Math.exp(-2.5 * delta))
+  _attractLook.set(0, 1.6, 10).applyQuaternion(g.quaternion).add(g.position)
+  _attractTarget.lerp(_attractLook, 1 - Math.exp(-4 * delta))
+  camera.lookAt(_attractTarget)
 }
 
 function refreshMenuPreview() {
   if (menuEl.classList.contains('hidden') || !track) return
-  frameBirdview()
+  startAttract()
   menuHorizon.textContent = track.trackFile.horizonName
   menuTiles.textContent = countDrivable(track.trackFile)
 }
@@ -797,6 +828,7 @@ function startDriving() {
   hud.setVisible(true)
   document.getElementById('view-btn').classList.remove('hidden')
   debug.topView = false
+  stopAttract()
   vehicle.respawn()
   resetTimer()
   resetOpponent() // opponent starts fresh alongside the player
@@ -1010,15 +1042,17 @@ function tick() {
     updateLoopAssist(delta)
     updateOpponent(delta)
   }
-  if (debug.topView) updateTopView()
+  if (attractActive) updateAttract(delta)
+  else if (debug.topView) updateTopView()
   else if (debug.freeze) {
     // manual/frozen camera — leave it where it is
   } else cameraController.update(delta)
   // Fog would hide the whole track from the high top-down camera.
   scene.fog = debug.topView ? null : sceneFog
 
-  // Keep the sun/shadow frustum centred on the car.
-  followShadow(vehicle.group.position.x, vehicle.group.position.z)
+  // Keep the sun/shadow frustum centred on whatever the camera is following.
+  const shadowFocus = attractActive ? opponent.group.position : vehicle.group.position
+  followShadow(shadowFocus.x, shadowFocus.z)
 
   const roundedSpeed = Math.round(vehicle.speedKmh)
   hud.setSpeed(roundedSpeed)
