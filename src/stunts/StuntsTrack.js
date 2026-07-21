@@ -130,11 +130,14 @@ export class StuntsTrack {
       case CATEGORY.TUNNEL:
         this._addPipe(el, center)
         break
+      // Scenery and buildings are decoration/obstacles that belong off the
+      // road. Skip any that abut the drivable path so they never clutter or
+      // sit "in the middle of" the track.
       case CATEGORY.SCENERY:
-        this._addScenery(el, center)
+        if (!this._touchesRoad(x, y)) this._addScenery(el, center)
         break
       case CATEGORY.BUILDING:
-        this._addBuilding(el, center)
+        if (!this._touchesRoad(x, y)) this._addBuilding(el, center)
         break
       // ROAD, CORNER, JUNCTION, CHICANE, BANKED, START, FILLER, HIGHWAY,
       // CORKSCREW — flush road; convex outer corners are rounded from the
@@ -484,6 +487,16 @@ export class StuntsTrack {
   _drivableAt(x, y) {
     if (x < 0 || x >= GRID || y < 0 || y >= GRID) return false
     return describeElement(this.trackFile.trackAt(x, y)).drivable
+  }
+
+  /** True if any orthogonal neighbour is drivable — i.e. the tile abuts the road. */
+  _touchesRoad(x, y) {
+    return (
+      this._drivableAt(x + 1, y) ||
+      this._drivableAt(x - 1, y) ||
+      this._drivableAt(x, y + 1) ||
+      this._drivableAt(x, y - 1)
+    )
   }
 
   _tileHeight(x, y) {
