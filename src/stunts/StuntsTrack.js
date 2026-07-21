@@ -452,6 +452,8 @@ export class StuntsTrack {
   _findStart() {
     let firstDrivable = null
     let firstCell = null
+    let firstStraight = null
+    let firstStraightCell = null
     for (let y = 0; y < GRID; y++) {
       for (let x = 0; x < GRID; x++) {
         const el = describeElement(this.trackFile.trackAt(x, y))
@@ -467,10 +469,16 @@ export class StuntsTrack {
           firstDrivable = pos
           firstCell = { x, y }
         }
+        // A straight tile makes a far better start/finish than a corner, so
+        // tracks without a real start piece anchor on the first one found.
+        if (!firstStraight && el.category === CATEGORY.ROAD) {
+          firstStraight = pos
+          firstStraightCell = { x, y }
+        }
       }
     }
-    this.startCell = firstCell ?? { x: 15, y: 15 }
-    return firstDrivable ?? new THREE.Vector3(0, 3, 0)
+    this.startCell = firstStraightCell ?? firstCell ?? { x: 15, y: 15 }
+    return firstStraight ?? firstDrivable ?? new THREE.Vector3(0, 3, 0)
   }
 
   _drivableAt(x, y) {
