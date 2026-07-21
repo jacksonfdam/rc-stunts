@@ -221,7 +221,35 @@ export class StuntsTrack {
         [w / 2, y, z],
       ])
     }
-    this._addSweptSurface(rings, center, yaw, el.color)
+    this._addSweptSurface(rings, center, yaw, el.color, { collide: false })
+
+    // Solid, correctly-oriented collider: a thin box tilted to the incline,
+    // derived from the ramp's own end-points. A Trimesh only contacts the
+    // chassis's corner spheres (not its box), so the car sinks through mid-ramp;
+    // a convex box is solid and its top face is where the wheels ride.
+    const cos = Math.cos(yaw)
+    const sin = Math.sin(yaw)
+    const toWorld = (x, y, z) =>
+      new THREE.Vector3(x * cos + z * sin + center.x, y + center.y, -x * sin + z * cos + center.z)
+    const bottom = toWorld(0, ROAD_H, -len / 2)
+    const top = toWorld(0, ELEV_H + ROAD_H, len / 2)
+    const slope = new THREE.Vector3().subVectors(top, bottom)
+    const slopeLen = slope.length()
+    const THICK = 2
+    const F = slope.clone().normalize() // along the ramp (box local +Z)
+    const R = new THREE.Vector3().crossVectors(F, new THREE.Vector3(0, 1, 0)).normalize() // across, horizontal (+X)
+    const U = new THREE.Vector3().crossVectors(R, F).normalize() // surface normal (+Y)
+    const quat = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(R, U, F))
+    // Sit the box's top face on the surface (drop it half a thickness down-normal).
+    const mid = new THREE.Vector3().addVectors(top, bottom).multiplyScalar(0.5).addScaledVector(U, -THICK / 2)
+
+    const body = new CANNON.Body({ mass: 0, material: this.physicsWorld.defaultMaterial })
+    body.addShape(new CANNON.Box(new CANNON.Vec3(w / 2, THICK / 2, slopeLen / 2)))
+    body.position.set(mid.x, mid.y, mid.z)
+    body.quaternion.set(quat.x, quat.y, quat.z, quat.w)
+    body.updateAABB()
+    this.physicsWorld.addBody(body)
+    this.colliderBodies.push(body)
   }
 
   _addElevated(el, center) {
@@ -260,7 +288,7 @@ export class StuntsTrack {
    * yawed about Y and translated to `center`, and the world coordinates are
    * baked into both the geometry and the trimesh so the collider is exact.
    */
-  _addSweptSurface(rings, center, yaw, color) {
+  _addSweptSurface(rings, center, yaw, color, { collide = true } = {}) {
     const cos = Math.cos(yaw)
     const sin = Math.sin(yaw)
     const K = rings.length
@@ -301,6 +329,7 @@ export class StuntsTrack {
     mesh.receiveShadow = true
     this.group.add(mesh)
 
+    if (!collide) return
     const trimesh = new CANNON.Trimesh(Array.from(positions), indices)
     const body = new CANNON.Body({ mass: 0, material: this.physicsWorld.defaultMaterial })
     body.addShape(trimesh)
